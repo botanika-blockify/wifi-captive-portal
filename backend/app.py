@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import os, subprocess, shlex
 from flask import Flask, request, jsonify, send_from_directory
 
@@ -48,6 +47,17 @@ def api_status():
     code_rt, out_rt, _ = run("ip route show default")
     code_ping, _, _ = run("ping -c1 -w2 8.8.8.8")
     return jsonify({"ok": True, "iface": WIFI_IFACE, "ip": out_ip, "default_route": out_rt, "internet": (code_ping == 0)})
+
+@app.get("/generate_204")
+@app.get("/gen_204")
+@app.get("/library/test/success.html")
+@app.get("/hotspot-detect.html")
+@app.get("/hotspot-detect")
+@app.get("/ncsi.txt")
+@app.get("/connecttest.txt")
+@app.get("/redirect")
+def captive_probes():
+    return redirect("/", code=302)
 
 @app.route("/", defaults={"path": "index.html"})
 @app.route("/<path:path>")
