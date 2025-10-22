@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1"
+    />
+    <title>Wi-Fi Setup</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        background: #f6f7f9;
+        margin: 0;
+      }
+      .wrap {
+        max-width: 480px;
+        margin: 40px auto;
+        background: #fff;
+        padding: 24px;
+        border-radius: 12px;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 12px;
+      }
+      .list {
+        margin: 12px 0;
+        max-height: 200px;
+        overflow: auto;
+      }
+      .ssid {
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        margin-bottom: 8px;
+        cursor: pointer;
+      }
+      .ssid:hover {
+        background: #f3f4f6;
+      }
+      .muted {
+        color: #666;
+        font-size: 13px;
+      }
+      .ok {
+        color: green;
+      }
+      .err {
+        color: red;
+        white-space: pre-wrap;
+      }
+      input,
+      button {
+        font: inherit;
+        padding: 10px;
+        margin-top: 8px;
+        width: 100%;
+        border-radius: 8px;
+        border: 1px solid #ccc;
+      }
+      button {
+        background: #111827;
+        color: white;
+        border: 0;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Connect to Wi-Fi</h1>
+      <button id="scanBtn">Scan Networks</button>
+      <div
+        id="ssidList"
+        class="list"
+      ></div>
+      <input
+        id="ssidInput"
+        placeholder="SSID"
+      />
+      <input
+        id="pwdInput"
+        type="password"
+        placeholder="Password (if any)"
+      />
+      <button id="connectBtn">Connect</button>
+      <p
+        id="result"
+        class="muted"
+      ></p>
+      <p
+        id="error"
+        class="err"
+      ></p>
+    </div>
+
+    <script>
+      async function scan() {
+        document.getElementById('ssidList').innerHTML = 'Scanning...'
+        try {
+          let res = await fetch('/api/scan')
+          let data = await res.json()
+          let list = ''
+          for (let n of data.networks) {
+            list += `<div class="ssid" onclick="selectSSID('${n.ssid}')"><b>${n.ssid}</b> (${n.signal || ''}%)</div>`
+          }
+          document.getElementById('ssidList').innerHTML = list || 'No networks found.'
+        } catch (e) {
+          document.getElementById('ssidList').innerText = 'Error scanning.'
+        }
+      }
+      function selectSSID(ssid) {
+        document.getElementById('ssidInput').value = ssid
+      }
+      async function connect() {
+        let ssid = document.getElementById('ssidInput').value.trim()
+        let pwd = document.getElementById('pwdInput').value.trim()
+        document.getElementById('result').innerText = 'Connecting...'
+        try {
+          let res = await fetch('/api/connect', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ssid, password: pwd }),
+          })
+          let data = await res.json()
+          if (data.ok) {
+            document.getElementById('result').innerText = '✅ Connected to ' + ssid
+          } else {
+            document.getElementById('error').innerText = '❌ ' + (data.stderr || 'Failed')
+          }
+        } catch (e) {
+          document.getElementById('error').innerText = 'Error: ' + e
+        }
+      }
+      document.getElementById('scanBtn').onclick = scan
+      document.getElementById('connectBtn').onclick = connect
+      scan()
+    </script>
+  </body>
+</html>
