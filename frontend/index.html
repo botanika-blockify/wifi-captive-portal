@@ -229,24 +229,10 @@
               document.getElementById('error').innerText = '❌ Error: ' + (data.stderr || 'Unable to connect.')
             }
             document.getElementById('result').innerText = ''
-            setTimeout(() => {
-              document.getElementById('error').classList.add('fade')
-              setTimeout(() => {
-                document.getElementById('error').innerText = ''
-                document.getElementById('error').classList.remove('fade')
-              }, 500)
-            }, 5000)
           }
         } catch (e) {
           document.getElementById('error').innerText = '❌ Error: ' + e
           document.getElementById('result').innerText = ''
-          setTimeout(() => {
-            document.getElementById('error').classList.add('fade')
-            setTimeout(() => {
-              document.getElementById('error').innerText = ''
-              document.getElementById('error').classList.remove('fade')
-            }, 500)
-          }, 5000)
         }
       }
 
@@ -256,4 +242,3 @@
     </script>
   </body>
 </html>
-```
