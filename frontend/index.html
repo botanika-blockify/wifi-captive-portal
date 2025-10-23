@@ -24,10 +24,11 @@
         align-items: center;
         min-height: 100vh;
         color: #ffffff;
+        padding: 20px;
       }
       .wrap {
         max-width: 420px;
-        margin: 20px;
+        width: 100%;
         background: #23272b;
         padding: 32px;
         border-radius: 18px;
@@ -47,11 +48,20 @@
         font-weight: 700;
         text-align: center;
       }
-      .list {
+      .list-container {
+        min-height: 180px;
         margin: 16px 0;
+        position: relative;
+      }
+      .list {
         max-height: 180px;
         overflow-y: auto;
         padding-right: 8px;
+        transition: opacity 0.3s ease;
+      }
+      .list.scanning {
+        opacity: 0.6;
+        pointer-events: none;
       }
       .list::-webkit-scrollbar {
         width: 6px;
@@ -79,12 +89,16 @@
         border-color: #f28c38;
         transform: translateY(-2px);
       }
+      .ssid:active {
+        transform: translateY(0);
+      }
       .muted {
         color: #a0a6b0;
         font-size: 14px;
         font-weight: 500;
         margin-top: 12px;
         text-align: center;
+        min-height: 20px;
       }
       .ok {
         color: #f28c38;
@@ -94,6 +108,7 @@
         text-align: center;
         opacity: 0;
         animation: fadeIn 0.5s forwards;
+        min-height: 24px;
       }
       .err {
         color: #ff7125;
@@ -104,6 +119,7 @@
         white-space: pre-wrap;
         opacity: 0;
         animation: fadeIn 0.5s forwards;
+        min-height: 24px;
       }
       @keyframes fadeIn {
         to {
@@ -112,11 +128,11 @@
       }
       .password-wrapper {
         position: relative;
+        margin-top: 12px;
       }
       input {
         font: inherit;
         padding: 12px 16px;
-        margin-top: 12px;
         width: 100%;
         border-radius: 10px;
         border: 1px solid #2f343b;
@@ -180,6 +196,9 @@
         transform: translateY(-2px);
         box-shadow: 0 4px 12px rgba(242, 140, 56, 0.3);
       }
+      button.connect:active {
+        transform: translateY(0);
+      }
       button.connect:disabled {
         background: #4a4f56;
         cursor: not-allowed;
@@ -208,6 +227,10 @@
       button.scan svg {
         margin-right: 6px;
         fill: #f28c38;
+        transition: transform 0.3s ease;
+      }
+      button.scan.loading svg {
+        animation: spin 1s linear infinite;
       }
       button.scan:disabled {
         color: #4a4f56;
@@ -240,6 +263,41 @@
       button.loading span {
         opacity: 0;
       }
+      .scanning-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(35, 39, 43, 0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease;
+      }
+      .scanning-overlay.active {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .empty-state {
+        text-align: center;
+        color: #a0a6b0;
+        padding: 20px;
+        font-style: italic;
+      }
+      .form-group {
+        margin-bottom: 16px;
+      }
+      .form-group label {
+        display: block;
+        margin-bottom: 8px;
+        color: #a0a6b0;
+        font-size: 14px;
+        font-weight: 500;
+      }
     </style>
   </head>
   <body>
@@ -250,68 +308,90 @@
         class="logo"
       />
       <h1>Connect to Wi-Fi</h1>
-      <button
-        id="scanBtn"
-        class="scan"
-      >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <path
-            d="M4 12C4 16.4183 7.58172 20 12 20C14.2091 20 16.2091 19.1046 17.6569 17.6569L16.2426 16.2426C15.2116 17.2736 13.6893 18 12 18C8.68629 18 6 15.3137 6 12C6 8.68629 8.68629 6 12 6C13.6893 6 15.2116 6.72639 16.2426 7.75736L17.6569 6.34315C16.2091 4.89543 14.2091 4 12 4C7.58172 4 4 7.58172 4 12Z"
-            fill="currentColor"
-          />
-          <path
-            d="M18 12C18 9.79086 16.2091 8 14 8V10C15.1046 10 16 10.8954 16 12C16 13.1046 15.1046 14 14 14V16C16.2091 16 18 14.2091 18 12Z"
-            fill="currentColor"
-          />
-        </svg>
-        Rescan
-      </button>
-      <div
-        id="ssidList"
-        class="list"
-      ></div>
-      <input
-        id="ssidInput"
-        placeholder="SSID"
-      />
-      <div class="password-wrapper">
-        <input
-          id="pwdInput"
-          type="password"
-          placeholder="Password (if any)"
-        />
-        <span
-          class="toggle-password"
-          onclick="togglePassword()"
+
+      <div class="form-group">
+        <button
+          id="scanBtn"
+          class="scan"
         >
           <svg
-            width="20"
-            height="20"
+            width="16"
+            height="16"
             viewBox="0 0 24 24"
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
           >
-            <!-- Eye open icon -->
             <path
-              d="M12 4.5C7 4.5 2.73 7.61 1 12C2.73 16.39 7 19.5 12 19.5C17 19.5 21.27 16.39 23 12C21.27 7.61 17 4.5 12 4.5ZM12 17C9.24 17 7 14.76 7 12C7 9.24 9.24 7 12 7C14.76 7 17 9.24 17 12C17 14.76 14.76 17 12 17ZM12 9C10.34 9 9 10.34 9 12C9 13.66 10.34 15 12 15C13.66 15 15 13.66 15 12C15 10.34 13.66 9 12 9Z"
+              d="M4 12C4 16.4183 7.58172 20 12 20C14.2091 20 16.2091 19.1046 17.6569 17.6569L16.2426 16.2426C15.2116 17.2736 13.6893 18 12 18C8.68629 18 6 15.3137 6 12C6 8.68629 8.68629 6 12 6C13.6893 6 15.2116 6.72639 16.2426 7.75736L17.6569 6.34315C16.2091 4.89543 14.2091 4 12 4C7.58172 4 4 7.58172 4 12Z"
               fill="currentColor"
-              class="eye-open"
             />
-            <!-- Eye closed icon -->
             <path
-              d="M12 7C14.76 7 17 9.24 17 12C17 12.65 16.87 13.26 16.64 13.83L19.56 16.75C21.07 15.49 22.26 13.86 22.99 12C21.26 7.61 16.99 4.5 11.99 4.5C10.59 4.5 9.25 4.75 8.01 5.2L10.17 7.36C10.74 7.13 11.35 7 12 7ZM2 4.27L4.28 6.55L4.74 7.01C3.08 8.3 1.78 10.02 1 12C2.73 16.39 7 19.5 12 19.5C13.55 19.5 15.03 19.2 16.38 18.66L16.8 19.08L19.73 22L21 20.73L3.27 3L2 4.27ZM7.53 9.8L9.08 11.35C9.03 11.56 9 11.78 9 12C9 13.66 10.34 15 12 15C12.22 15 12.44 14.97 12.65 14.92L14.2 16.47C13.53 16.8 12.79 17 12 17C9.24 17 7 14.76 7 12C7 11.21 7.2 10.47 7.53 9.8ZM11.84 9.02L14.99 12.17L15.01 12.01C15.01 10.35 13.67 9.01 12.01 9.01L11.84 9.02Z"
+              d="M18 12C18 9.79086 16.2091 8 14 8V10C15.1046 10 16 10.8954 16 12C16 13.1046 15.1046 14 14 14V16C16.2091 16 18 14.2091 18 12Z"
               fill="currentColor"
-              class="eye-closed"
-              style="display: none"
             />
           </svg>
-        </span>
+          Rescan
+        </button>
+      </div>
+
+      <div class="list-container">
+        <div
+          id="ssidList"
+          class="list"
+        >
+          <div class="empty-state">Click "Rescan" to find Wi-Fi networks</div>
+        </div>
+        <div
+          id="scanningOverlay"
+          class="scanning-overlay"
+        >
+          <div class="loader"></div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="ssidInput">Network Name (SSID)</label>
+        <input
+          id="ssidInput"
+          placeholder="Enter SSID"
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="pwdInput">Password</label>
+        <div class="password-wrapper">
+          <input
+            id="pwdInput"
+            type="password"
+            placeholder="Enter password (if any)"
+          />
+          <span
+            class="toggle-password"
+            onclick="togglePassword()"
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <!-- Eye open icon -->
+              <path
+                d="M12 4.5C7 4.5 2.73 7.61 1 12C2.73 16.39 7 19.5 12 19.5C17 19.5 21.27 16.39 23 12C21.27 7.61 17 4.5 12 4.5ZM12 17C9.24 17 7 14.76 7 12C7 9.24 9.24 7 12 7C14.76 7 17 9.24 17 12C17 14.76 14.76 17 12 17ZM12 9C10.34 9 9 10.34 9 12C9 13.66 10.34 15 12 15C13.66 15 15 13.66 15 12C15 10.34 13.66 9 12 9Z"
+                fill="currentColor"
+                class="eye-open"
+              />
+              <!-- Eye closed icon -->
+              <path
+                d="M12 7C14.76 7 17 9.24 17 12C17 12.65 16.87 13.26 16.64 13.83L19.56 16.75C21.07 15.49 22.26 13.86 22.99 12C21.26 7.61 16.99 4.5 11.99 4.5C10.59 4.5 9.25 4.75 8.01 5.2L10.17 7.36C10.74 7.13 11.35 7 12 7ZM2 4.27L4.28 6.55L4.74 7.01C3.08 8.3 1.78 10.02 1 12C2.73 16.39 7 19.5 12 19.5C13.55 19.5 15.03 19.2 16.38 18.66L16.8 19.08L19.73 22L21 20.73L3.27 3L2 4.27ZM7.53 9.8L9.08 11.35C9.03 11.56 9 11.78 9 12C9 13.66 10.34 15 12 15C12.22 15 12.44 14.97 12.65 14.92L14.2 16.47C13.53 16.8 12.79 17 12 17C9.24 17 7 14.76 7 12C7 11.21 7.2 10.47 7.53 9.8ZM11.84 9.02L14.99 12.17L15.01 12.01C15.01 10.35 13.67 9.01 12.01 9.01L11.84 9.02Z"
+                fill="currentColor"
+                class="eye-closed"
+                style="display: none"
+              />
+            </svg>
+          </span>
+        </div>
       </div>
 
       <button
@@ -320,6 +400,7 @@
       >
         <span>Connect</span><span class="loader"></span>
       </button>
+
       <p
         id="result"
         class="muted"
@@ -335,6 +416,8 @@
     </div>
 
     <script>
+      let currentNetworks = []
+
       function clearMessages() {
         const errorEl = document.getElementById('error')
         const successEl = document.getElementById('success')
@@ -344,37 +427,57 @@
         resultEl.innerText = ''
         errorEl.style.animation = 'none'
         successEl.style.animation = 'none'
+
+        // Force reflow
+        void errorEl.offsetWidth
+        void successEl.offsetWidth
       }
 
       async function scan() {
         clearMessages()
         const scanBtn = document.getElementById('scanBtn')
         const ssidList = document.getElementById('ssidList')
+        const scanningOverlay = document.getElementById('scanningOverlay')
+
         scanBtn.disabled = true
         scanBtn.classList.add('loading')
-        ssidList.innerHTML = 'Scanning...'
+        ssidList.classList.add('scanning')
+        scanningOverlay.classList.add('active')
+
         try {
+          // Simulate API call delay for better UX
+          await new Promise((resolve) => setTimeout(resolve, 800))
+
           let res = await fetch('/api/scan')
           let data = await res.json()
+          currentNetworks = data.networks || []
+
           let list = ''
-          for (let n of data.networks) {
-            list += `<div class="ssid" onclick="selectSSID('${n.ssid.replace(/'/g, "\\'")}')"><b>${n.ssid}</b> (${
-              n.signal || ''
-            }%)</div>`
+          if (currentNetworks.length > 0) {
+            for (let n of currentNetworks) {
+              list += `<div class="ssid" onclick="selectSSID('${n.ssid.replace(/'/g, "\\'")}')"><b>${n.ssid}</b> (${
+                n.signal || ''
+              }%)</div>`
+            }
+          } else {
+            list = '<div class="empty-state">No networks found. Try again.</div>'
           }
-          ssidList.innerHTML = list || 'No networks found.'
+          ssidList.innerHTML = list
         } catch (e) {
-          ssidList.innerHTML = ''
-          document.getElementById('error').innerText = '❌ Unable to scan Wi-Fi networks.'
-          document.getElementById('error').style.animation = 'fadeIn 0.5s forwards'
+          console.error('Scan error:', e)
+          ssidList.innerHTML = '<div class="empty-state">Unable to scan Wi-Fi networks</div>'
         } finally {
           scanBtn.disabled = false
           scanBtn.classList.remove('loading')
+          ssidList.classList.remove('scanning')
+          scanningOverlay.classList.remove('active')
         }
       }
 
       function selectSSID(ssid) {
         document.getElementById('ssidInput').value = ssid
+        // Auto-focus on password field for better UX
+        document.getElementById('pwdInput').focus()
       }
 
       function togglePassword() {
@@ -396,17 +499,26 @@
         clearMessages()
         const connectBtn = document.getElementById('connectBtn')
         const resultEl = document.getElementById('result')
+
+        const ssid = document.getElementById('ssidInput').value.trim()
+        const password = document.getElementById('pwdInput').value.trim()
+
+        // Basic validation
+        if (!ssid) {
+          document.getElementById('error').innerText = '❌ Please enter a network name'
+          document.getElementById('error').style.animation = 'fadeIn 0.5s forwards'
+          return
+        }
+
         connectBtn.disabled = true
         connectBtn.classList.add('loading')
         resultEl.innerText = 'Connecting...'
+
         try {
           let res = await fetch('/api/connect', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              ssid: document.getElementById('ssidInput').value.trim(),
-              password: document.getElementById('pwdInput').value.trim(),
-            }),
+            body: JSON.stringify({ ssid, password }),
           })
           let data = await res.json()
           if (data.ok) {
@@ -414,7 +526,7 @@
             document.getElementById('success').style.animation = 'fadeIn 0.5s forwards'
             setTimeout(() => {
               window.location.href = 'success.html'
-            }, 1000)
+            }, 1500)
           } else {
             let errMsg = (data.stderr || 'Failed').toLowerCase()
             if (
@@ -424,14 +536,17 @@
               errMsg.includes('failed to activate connection')
             ) {
               document.getElementById('error').innerText = '❌ Incorrect Wi-Fi password!'
+            } else if (errMsg.includes('network not found')) {
+              document.getElementById('error').innerText = '❌ Network not found. Please check the SSID.'
             } else {
-              document.getElementById('error').innerText = '❌ Error: ' + (data.stderr || 'Unable to connect.')
+              document.getElementById('error').innerText = '❌ Unable to connect to network.'
             }
             document.getElementById('error').style.animation = 'fadeIn 0.5s forwards'
             resultEl.innerText = ''
           }
         } catch (e) {
-          document.getElementById('error').innerText = '❌ Error: ' + e
+          console.error('Connection error:', e)
+          document.getElementById('error').innerText = '❌ Connection failed. Please try again.'
           document.getElementById('error').style.animation = 'fadeIn 0.5s forwards'
           resultEl.innerText = ''
         } finally {
@@ -440,9 +555,19 @@
         }
       }
 
+      // Initialize
       document.getElementById('scanBtn').onclick = scan
       document.getElementById('connectBtn').onclick = connect
-      scan()
+
+      // Auto-scan on page load
+      setTimeout(scan, 500)
+
+      // Enter key support
+      document.getElementById('pwdInput').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') {
+          connect()
+        }
+      })
     </script>
   </body>
 </html>
