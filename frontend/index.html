@@ -112,7 +112,7 @@
         background: #23272b;
       }
       button {
-        background: linear-gradient(90deg, #00bd8f 0%, #ff7125 100%);
+        background: #ff7125;
         color: #fff;
         border: 0;
         cursor: pointer;
@@ -177,14 +177,12 @@
           let data = await res.json()
           let list = ''
           for (let n of data.networks) {
-            list += `<div class="ssid" onclick="selectSSID('${n.ssid.replace(/'/g, "\\'")}')"><b>${n.ssid}</b> (${
-              n.signal || ''
-            }%)</div>`
+            list += `<div class="ssid" onclick="selectSSID('${n.ssid.replace(/'/g, "\\'")}')"><b>${n.ssid}</b></div>`
           }
           document.getElementById('ssidList').innerHTML = list || 'No networks found.'
         } catch (e) {
           document.getElementById('ssidList').innerHTML = ''
-          document.getElementById('error').innerText = '❌ Unable to scan Wi-Fi networks.'
+          document.getElementById('error').innerText = 'Unable to scan Wi-Fi networks.'
         }
       }
 
@@ -216,14 +214,14 @@
               errMsg.includes('no secrets were provided') ||
               errMsg.includes('failed to activate connection')
             ) {
-              document.getElementById('error').innerText = '❌ Incorrect Wi-Fi password!'
+              document.getElementById('error').innerText = 'Incorrect Wi-Fi password!'
             } else {
-              document.getElementById('error').innerText = '❌ Error: ' + (data.stderr || 'Unable to connect.')
+              document.getElementById('error').innerText = 'Error: ' + (data.stderr || 'Unable to connect.')
             }
             document.getElementById('result').innerText = ''
           }
         } catch (e) {
-          document.getElementById('error').innerText = '❌ Error: ' + e
+          document.getElementById('error').innerText = 'Error: ' + e
           document.getElementById('result').innerText = ''
         }
       }
