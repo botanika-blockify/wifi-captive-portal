@@ -24,102 +24,142 @@
         align-items: center;
         min-height: 100vh;
         color: #ffffff;
-        padding: 20px;
+        padding: 16px;
       }
       .wrap {
-        max-width: 420px;
+        max-width: 380px;
         width: 100%;
         background: #23272b;
-        padding: 32px;
-        border-radius: 18px;
-        box-shadow: 0 8px 32px rgba(242, 140, 56, 0.1);
+        padding: 24px;
+        border-radius: 16px;
+        box-shadow: 0 6px 24px rgba(242, 140, 56, 0.1);
         border: 1px solid #2f343b;
       }
       .logo {
         display: block;
-        margin: 0 auto 24px;
-        width: 160px;
+        margin: 0 auto 20px;
+        width: 140px;
         height: auto;
       }
       h1 {
-        font-size: 24px;
-        margin: 0 0 24px;
+        font-size: 20px;
+        margin: 0 0 20px;
         color: #f28c38;
         font-weight: 700;
         text-align: center;
       }
       .list-container {
-        min-height: 180px;
-        margin: 16px 0;
+        min-height: 140px;
+        margin: 12px 0;
         position: relative;
       }
       .list {
-        max-height: 180px;
+        max-height: 140px;
         overflow-y: auto;
-        padding-right: 8px;
+        padding-right: 6px;
         transition: opacity 0.3s ease;
+        display: flex;
+        flex-direction: column;
       }
       .list.scanning {
         opacity: 0.6;
         pointer-events: none;
       }
       .list::-webkit-scrollbar {
-        width: 6px;
+        width: 4px;
       }
       .list::-webkit-scrollbar-track {
         background: #181c20;
-        border-radius: 10px;
+        border-radius: 8px;
       }
       .list::-webkit-scrollbar-thumb {
         background: #f28c38;
-        border-radius: 10px;
+        border-radius: 8px;
       }
       .ssid {
-        padding: 12px;
+        padding: 10px 12px;
         border: 1px solid #2f343b;
-        border-radius: 10px;
-        margin-bottom: 10px;
+        border-radius: 8px;
+        margin-bottom: 8px;
         cursor: pointer;
         background: #181c20;
         color: #ffffff;
-        transition: all 0.3s ease;
+        transition: all 0.2s ease;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
       }
       .ssid:hover {
         background: #3a2f25;
         border-color: #f28c38;
-        transform: translateY(-2px);
+        transform: translateY(-1px);
       }
       .ssid:active {
         transform: translateY(0);
       }
+      .ssid-info {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+      }
+      .signal-strength {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        flex-shrink: 0;
+      }
+      .signal-bar {
+        width: 3px;
+        background: #a0a6b0;
+        border-radius: 1px;
+        transition: all 0.2s ease;
+      }
+      .signal-bar.active {
+        background: #f28c38;
+      }
       .muted {
         color: #a0a6b0;
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 500;
-        margin-top: 12px;
         text-align: center;
-        min-height: 20px;
+        min-height: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 4px 0 0 0;
       }
       .ok {
         color: #f28c38;
-        font-size: 16px;
+        font-size: 14px;
         font-weight: 600;
-        margin-top: 12px;
         text-align: center;
         opacity: 0;
         animation: fadeIn 0.5s forwards;
-        min-height: 24px;
+        min-height: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        margin: 4px 0 0 0;
       }
       .err {
         color: #ff7125;
-        font-size: 16px;
+        font-size: 14px;
         font-weight: 600;
-        margin-top: 12px;
         text-align: center;
         white-space: pre-wrap;
         opacity: 0;
         animation: fadeIn 0.5s forwards;
-        min-height: 24px;
+        min-height: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        line-height: 1.3;
+        margin: 4px 0 0 0;
       }
       @keyframes fadeIn {
         to {
@@ -128,44 +168,46 @@
       }
       .password-wrapper {
         position: relative;
-        margin-top: 12px;
+        margin-top: 10px;
       }
       input {
         font: inherit;
-        padding: 12px 16px;
+        padding: 10px 14px;
         width: 100%;
-        border-radius: 10px;
+        border-radius: 8px;
         border: 1px solid #2f343b;
         background: #181c20;
         color: #ffffff;
-        transition: all 0.3s ease;
+        transition: all 0.2s ease;
+        font-size: 14px;
       }
       input::placeholder {
         color: #a0a6b0;
         opacity: 1;
+        font-size: 14px;
       }
       input:focus {
         outline: none;
         border-color: #f28c38;
         background: #252a30;
-        box-shadow: 0 0 8px rgba(242, 140, 56, 0.2);
+        box-shadow: 0 0 6px rgba(242, 140, 56, 0.2);
       }
       .toggle-password {
         position: absolute;
-        right: 16px;
+        right: 14px;
         top: 50%;
         transform: translateY(-50%);
         cursor: pointer;
         color: #a0a6b0;
-        width: 20px;
-        height: 20px;
+        width: 18px;
+        height: 18px;
         display: flex;
         align-items: center;
         justify-content: center;
       }
       .toggle-password svg {
         fill: #a0a6b0;
-        transition: fill 0.3s ease;
+        transition: fill 0.2s ease;
         width: 100%;
         height: 100%;
       }
@@ -174,27 +216,28 @@
       }
       button.connect {
         font: inherit;
-        padding: 14px;
-        margin-top: 16px;
+        padding: 12px;
+        margin-top: 24px;
         width: 100%;
-        border-radius: 10px;
+        border-radius: 8px;
         border: none;
         background: #f28c38;
         color: #ffffff;
         font-weight: 600;
         cursor: pointer;
-        transition: all 0.3s ease;
+        transition: all 0.2s ease;
         position: relative;
         overflow: hidden;
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 8px;
+        gap: 6px;
+        font-size: 14px;
       }
       button.connect:hover {
         background: #e07b30;
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(242, 140, 56, 0.3);
+        transform: translateY(-1px);
+        box-shadow: 0 3px 10px rgba(242, 140, 56, 0.3);
       }
       button.connect:active {
         transform: translateY(0);
@@ -207,27 +250,29 @@
       }
       button.scan {
         font: inherit;
-        padding: 8px 0;
-        margin-top: 12px;
+        padding: 6px 0;
+        margin-top: 8px;
         width: auto;
         border: none;
         background: none;
         color: #f28c38;
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 600;
         cursor: pointer;
         display: flex;
         align-items: center;
-        gap: 6px;
-        transition: all 0.3s ease;
+        justify-content: center;
+        gap: 4px;
+        transition: all 0.2s ease;
       }
       button.scan:hover {
         text-decoration: underline;
       }
       button.scan svg {
-        margin-right: 6px;
         fill: #f28c38;
-        transition: transform 0.3s ease;
+        transition: transform 0.2s ease;
+        width: 14px;
+        height: 14px;
       }
       button.scan.loading svg {
         animation: spin 1s linear infinite;
@@ -241,8 +286,8 @@
         border: 2px solid #ffffff;
         border-top: 2px solid #f28c38;
         border-radius: 50%;
-        width: 20px;
-        height: 20px;
+        width: 16px;
+        height: 16px;
         animation: spin 1s linear infinite;
         position: absolute;
         left: 50%;
@@ -273,10 +318,10 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        border-radius: 10px;
+        border-radius: 8px;
         opacity: 0;
         pointer-events: none;
-        transition: opacity 0.3s ease;
+        transition: opacity 0.2s ease;
       }
       .scanning-overlay.active {
         opacity: 1;
@@ -285,18 +330,35 @@
       .empty-state {
         text-align: center;
         color: #a0a6b0;
-        padding: 20px;
+        padding: 16px;
         font-style: italic;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 50px;
+        font-size: 13px;
+        width: 100%;
+        height: 100%;
+        flex: 1;
       }
       .form-group {
-        margin-bottom: 16px;
+        margin-bottom: 12px;
       }
       .form-group label {
         display: block;
-        margin-bottom: 8px;
+        margin-bottom: 6px;
         color: #a0a6b0;
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 500;
+      }
+      .message-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        flex-shrink: 0;
+        font-size: 12px;
       }
     </style>
   </head>
@@ -315,8 +377,8 @@
           class="scan"
         >
           <svg
-            width="16"
-            height="16"
+            width="14"
+            height="14"
             viewBox="0 0 24 24"
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
@@ -370,8 +432,8 @@
             onclick="togglePassword()"
           >
             <svg
-              width="20"
-              height="20"
+              width="18"
+              height="18"
               viewBox="0 0 24 24"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
@@ -400,19 +462,6 @@
       >
         <span>Connect</span><span class="loader"></span>
       </button>
-
-      <p
-        id="result"
-        class="muted"
-      ></p>
-      <p
-        id="success"
-        class="ok"
-      ></p>
-      <p
-        id="error"
-        class="err"
-      ></p>
     </div>
 
     <script>
@@ -427,10 +476,31 @@
         resultEl.innerText = ''
         errorEl.style.animation = 'none'
         successEl.style.animation = 'none'
+        errorEl.className = ''
 
         // Force reflow
         void errorEl.offsetWidth
         void successEl.offsetWidth
+      }
+
+      function getSignalBars(signal) {
+        if (!signal) return 1
+        if (signal >= 80) return 4
+        if (signal >= 60) return 3
+        if (signal >= 40) return 2
+        return 1
+      }
+
+      function createSignalIcon(signal) {
+        const bars = getSignalBars(signal)
+        let html = '<div class="signal-strength">'
+        for (let i = 0; i < 4; i++) {
+          const height = 4 + i * 3 // 4px, 7px, 10px, 13px
+          const isActive = i < bars
+          html += `<div class="signal-bar ${isActive ? 'active' : ''}" style="height: ${height}px;"></div>`
+        }
+        html += '</div>'
+        return html
       }
 
       async function scan() {
@@ -446,7 +516,7 @@
 
         try {
           // Simulate API call delay for better UX
-          await new Promise((resolve) => setTimeout(resolve, 800))
+          await new Promise((resolve) => setTimeout(resolve, 600))
 
           let res = await fetch('/api/scan')
           let data = await res.json()
@@ -455,14 +525,19 @@
           let list = ''
           if (currentNetworks.length > 0) {
             for (let n of currentNetworks) {
-              list += `<div class="ssid" onclick="selectSSID('${n.ssid.replace(/'/g, "\\'")}')"><b>${n.ssid}</b> (${
-                n.signal || ''
-              }%)</div>`
+              const signalIcon = createSignalIcon(n.signal)
+              list += `
+                <div class="ssid" onclick="selectSSID('${n.ssid.replace(/'/g, "\\'")}')">
+                  <div class="ssid-info">
+                    <b>${n.ssid}</b>
+                  </div>
+                  ${signalIcon}
+                </div>`
             }
+            ssidList.innerHTML = list
           } else {
-            list = '<div class="empty-state">No networks found. Try again.</div>'
+            ssidList.innerHTML = '<div class="empty-state">No networks found. Try again.</div>'
           }
-          ssidList.innerHTML = list
         } catch (e) {
           console.error('Scan error:', e)
           ssidList.innerHTML = '<div class="empty-state">Unable to scan Wi-Fi networks</div>'
@@ -505,8 +580,10 @@
 
         // Basic validation
         if (!ssid) {
-          document.getElementById('error').innerText = '❌ Please enter a network name'
-          document.getElementById('error').style.animation = 'fadeIn 0.5s forwards'
+          const errorEl = document.getElementById('error')
+          errorEl.innerHTML = '<span class="message-icon">❌</span> Please enter a network name'
+          errorEl.className = 'err'
+          errorEl.style.animation = 'fadeIn 0.5s forwards'
           return
         }
 
@@ -522,32 +599,36 @@
           })
           let data = await res.json()
           if (data.ok) {
-            document.getElementById('success').innerText = '✅ Connected successfully!'
+            document.getElementById('success').innerHTML = '<span class="message-icon">✅</span> Connected successfully!'
             document.getElementById('success').style.animation = 'fadeIn 0.5s forwards'
             setTimeout(() => {
               window.location.href = 'success.html'
-            }, 1500)
+            }, 1200)
           } else {
             let errMsg = (data.stderr || 'Failed').toLowerCase()
+            const errorEl = document.getElementById('error')
             if (
               errMsg.includes('wrong password') ||
               errMsg.includes('secrets were required') ||
               errMsg.includes('no secrets were provided') ||
               errMsg.includes('failed to activate connection')
             ) {
-              document.getElementById('error').innerText = '❌ Incorrect Wi-Fi password!'
+              errorEl.innerHTML = '<span class="message-icon">❌</span> Incorrect Wi-Fi password!'
             } else if (errMsg.includes('network not found')) {
-              document.getElementById('error').innerText = '❌ Network not found. Please check the SSID.'
+              errorEl.innerHTML = '<span class="message-icon">❌</span> Network not found. Please check the SSID.'
             } else {
-              document.getElementById('error').innerText = '❌ Unable to connect to network.'
+              errorEl.innerHTML = '<span class="message-icon">❌</span> Unable to connect to network.'
             }
-            document.getElementById('error').style.animation = 'fadeIn 0.5s forwards'
+            errorEl.className = 'err'
+            errorEl.style.animation = 'fadeIn 0.5s forwards'
             resultEl.innerText = ''
           }
         } catch (e) {
           console.error('Connection error:', e)
-          document.getElementById('error').innerText = '❌ Connection failed. Please try again.'
-          document.getElementById('error').style.animation = 'fadeIn 0.5s forwards'
+          const errorEl = document.getElementById('error')
+          errorEl.innerHTML = '<span class="message-icon">❌</span> Connection failed. Please try again.'
+          errorEl.className = 'err'
+          errorEl.style.animation = 'fadeIn 0.5s forwards'
           resultEl.innerText = ''
         } finally {
           connectBtn.disabled = false
@@ -560,7 +641,7 @@
       document.getElementById('connectBtn').onclick = connect
 
       // Auto-scan on page load
-      setTimeout(scan, 500)
+      setTimeout(scan, 400)
 
       // Enter key support
       document.getElementById('pwdInput').addEventListener('keypress', function (e) {
