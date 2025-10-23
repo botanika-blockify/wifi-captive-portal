@@ -206,16 +206,8 @@
           })
           let data = await res.json()
           if (data.ok) {
-            document.getElementById('success').innerText =
-              '✅ Successfully connected to ' + document.getElementById('ssidInput').value.trim()
-            document.getElementById('result').innerText = ''
-            setTimeout(() => {
-              document.getElementById('success').classList.add('fade')
-              setTimeout(() => {
-                document.getElementById('success').innerText = ''
-                document.getElementById('success').classList.remove('fade')
-              }, 500)
-            }, 3000)
+            window.location.href = 'success.html'
+            return
           } else {
             let errMsg = (data.stderr || 'Failed').toLowerCase()
             if (
