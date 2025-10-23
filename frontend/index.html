@@ -10,24 +10,31 @@
     <style>
       body {
         font-family: 'Inter', Arial, sans-serif;
-        background: #f4f7f6;
+        background: #181c20;
         margin: 0;
       }
       .wrap {
         max-width: 420px;
         margin: 40px auto;
-        background: #fff;
+        background: #23272b;
         padding: 28px;
         border-radius: 18px;
-        box-shadow: 0 8px 32px rgba(0, 196, 108, 0.08);
-        border: 1px solid #e6f4ee;
+        box-shadow: 0 8px 32px rgba(0, 189, 143, 0.08);
+        border: 1px solid #222;
+      }
+      .logo {
+        display: block;
+        margin: 0 auto 18px auto;
+        width: 180px;
+        height: auto;
       }
       h1 {
         font-size: 22px;
         margin: 0 0 18px;
-        color: #00c46c;
+        color: #00bd8f;
         font-weight: 700;
         letter-spacing: 0.5px;
+        text-align: center;
       }
       .list {
         margin: 16px 0;
@@ -36,28 +43,52 @@
       }
       .ssid {
         padding: 12px;
-        border: 1px solid #e6f4ee;
+        border: 1px solid #222;
         border-radius: 10px;
         margin-bottom: 10px;
         cursor: pointer;
-        background: #f8fcfa;
+        background: #181c20;
+        color: #fff;
         transition: background 0.2s, border 0.2s;
       }
       .ssid:hover {
-        background: #e6f4ee;
-        border-color: #00c46c;
+        background: #23272b;
+        border-color: #00bd8f;
       }
       .muted {
-        color: #7d8b8c;
-        font-size: 13px;
+        color: #fff;
+        font-size: 15px;
+        font-weight: 500;
+        margin-top: 10px;
+        letter-spacing: 0.2px;
+        text-shadow: 0 1px 2px #181c20;
       }
       .ok {
-        color: #00c46c;
+        color: #fff;
+        font-size: 16px;
+        font-weight: 700;
+        margin-top: 12px;
+        opacity: 1;
+        letter-spacing: 0.3px;
+        text-shadow: 0 1px 2px #181c20;
+        transition: opacity 0.5s ease-out;
+      }
+      .ok.fade {
+        opacity: 0;
       }
       .err {
-        color: #e74c3c;
+        color: #ff7125;
+        font-size: 16px;
+        font-weight: 700;
         white-space: pre-wrap;
-        margin-top: 8px;
+        margin-top: 12px;
+        opacity: 1;
+        letter-spacing: 0.3px;
+        text-shadow: 0 1px 2px #181c20;
+        transition: opacity 0.5s ease-out;
+      }
+      .err.fade {
+        opacity: 0;
       }
       input,
       button {
@@ -66,16 +97,23 @@
         margin-top: 10px;
         width: 100%;
         border-radius: 10px;
-        border: 1px solid #e6f4ee;
+        border: 1px solid #222;
         box-sizing: border-box;
+        background: #181c20;
+        color: #fff; /* chữ trắng */
+      }
+      input::placeholder {
+        color: #fff; /* placeholder trắng */
+        opacity: 0.7;
       }
       input:focus {
-        outline: 2px solid #00c46c;
-        border-color: #00c46c;
+        outline: 2px solid #00bd8f;
+        border-color: #00bd8f;
+        background: #23272b;
       }
       button {
-        background: linear-gradient(90deg, #00c46c 0%, #00b86b 100%);
-        color: white;
+        background: linear-gradient(90deg, #00bd8f 0%, #ff7125 100%);
+        color: #fff;
         border: 0;
         cursor: pointer;
         font-weight: 600;
@@ -83,12 +121,17 @@
         transition: background 0.2s;
       }
       button:hover {
-        background: linear-gradient(90deg, #00b86b 0%, #00c46c 100%);
+        background: linear-gradient(90deg, #ff7125 0%, #00bd8f 100%);
       }
     </style>
   </head>
   <body>
     <div class="wrap">
+      <img
+        src="public/logo.png"
+        alt="Botanika Logo"
+        class="logo"
+      />
       <h1>Connect to Wi-Fi</h1>
       <button id="scanBtn">Scan Networks</button>
       <div
@@ -110,16 +153,25 @@
         class="muted"
       ></p>
       <p
+        id="success"
+        class="ok"
+      ></p>
+      <p
         id="error"
         class="err"
       ></p>
     </div>
 
     <script>
-      async function scan() {
-        document.getElementById('ssidList').innerHTML = 'Scanning...'
+      function clearMessages() {
         document.getElementById('error').innerText = ''
+        document.getElementById('success').innerText = ''
         document.getElementById('result').innerText = ''
+      }
+
+      async function scan() {
+        clearMessages()
+        document.getElementById('ssidList').innerHTML = 'Scanning...'
         try {
           let res = await fetch('/api/scan')
           let data = await res.json()
@@ -131,27 +183,39 @@
           }
           document.getElementById('ssidList').innerHTML = list || 'No networks found.'
         } catch (e) {
-          document.getElementById('ssidList').innerText = 'Error scanning.'
+          document.getElementById('ssidList').innerHTML = ''
+          document.getElementById('error').innerText = '❌ Unable to scan Wi-Fi networks.'
         }
       }
+
       function selectSSID(ssid) {
         document.getElementById('ssidInput').value = ssid
       }
+
       async function connect() {
-        let ssid = document.getElementById('ssidInput').value.trim()
-        let pwd = document.getElementById('pwdInput').value.trim()
+        clearMessages()
         document.getElementById('result').innerText = 'Connecting...'
-        document.getElementById('error').innerText = ''
         try {
           let res = await fetch('/api/connect', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ssid, password: pwd }),
+            body: JSON.stringify({
+              ssid: document.getElementById('ssidInput').value.trim(),
+              password: document.getElementById('pwdInput').value.trim(),
+            }),
           })
           let data = await res.json()
           if (data.ok) {
-            document.getElementById('result').innerText = '✅ Connected to ' + ssid
-            document.getElementById('error').innerText = ''
+            document.getElementById('success').innerText =
+              '✅ Successfully connected to ' + document.getElementById('ssidInput').value.trim()
+            document.getElementById('result').innerText = ''
+            setTimeout(() => {
+              document.getElementById('success').classList.add('fade')
+              setTimeout(() => {
+                document.getElementById('success').innerText = ''
+                document.getElementById('success').classList.remove('fade')
+              }, 500)
+            }, 3000)
           } else {
             let errMsg = (data.stderr || 'Failed').toLowerCase()
             if (
@@ -160,20 +224,36 @@
               errMsg.includes('no secrets were provided') ||
               errMsg.includes('failed to activate connection')
             ) {
-              document.getElementById('error').innerText = '❌ Sai mật khẩu Wi-Fi!'
+              document.getElementById('error').innerText = '❌ Incorrect Wi-Fi password!'
             } else {
-              document.getElementById('error').innerText = '❌ ' + (data.stderr || 'Failed')
+              document.getElementById('error').innerText = '❌ Error: ' + (data.stderr || 'Unable to connect.')
             }
             document.getElementById('result').innerText = ''
+            setTimeout(() => {
+              document.getElementById('error').classList.add('fade')
+              setTimeout(() => {
+                document.getElementById('error').innerText = ''
+                document.getElementById('error').classList.remove('fade')
+              }, 500)
+            }, 5000)
           }
         } catch (e) {
-          document.getElementById('error').innerText = 'Error: ' + e
+          document.getElementById('error').innerText = '❌ Error: ' + e
           document.getElementById('result').innerText = ''
+          setTimeout(() => {
+            document.getElementById('error').classList.add('fade')
+            setTimeout(() => {
+              document.getElementById('error').innerText = ''
+              document.getElementById('error').classList.remove('fade')
+            }, 500)
+          }, 5000)
         }
       }
+
       document.getElementById('scanBtn').onclick = scan
       document.getElementById('connectBtn').onclick = connect
       scan()
     </script>
   </body>
 </html>
+```
