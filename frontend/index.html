@@ -585,6 +585,7 @@
         const ssid = document.getElementById('ssidInput').value.trim()
         const password = document.getElementById('pwdInput').value.trim()
 
+        // Basic validation
         if (!ssid) {
           const errorEl = document.getElementById('error')
           errorEl.innerHTML = '<span class="message-icon">❌</span> Please enter a network name'
@@ -605,6 +606,7 @@
           })
 
           let data = await res.json()
+          console.log('API Response:', data) // Debug log
 
           if (data.ok) {
             document.getElementById('success').innerHTML = '<span class="message-icon">✅</span> Connected successfully!'
@@ -614,26 +616,33 @@
               window.location.href = '/success.html'
             }, 2000)
           } else {
+            // ALWAYS SHOW ERROR - don't let it disappear
+            const errorEl = document.getElementById('error')
             let errorMessage = 'Unable to connect to network'
 
+            // Check all possible error indicators
             if (data.error === 'wrong_password') {
+              errorMessage = 'Incorrect Wi-Fi password!'
+            } else if (
+              data.stderr &&
+              (data.stderr.toLowerCase().includes('password') ||
+                data.stderr.toLowerCase().includes('secrets') ||
+                data.stderr.toLowerCase().includes('wrong') ||
+                data.stderr.toLowerCase().includes('incorrect') ||
+                data.stderr.toLowerCase().includes('802.11') ||
+                data.stderr.toLowerCase().includes('wpa'))
+            ) {
               errorMessage = 'Incorrect Wi-Fi password!'
             } else if (data.error === 'network_not_found') {
               errorMessage = 'Network not found. Please check the SSID.'
-            } else if (data.stderr) {
-              let errMsg = data.stderr.toLowerCase()
-              if (errMsg.includes('secrets') || errMsg.includes('password') || errMsg.includes('wrong')) {
-                errorMessage = 'Incorrect Wi-Fi password!'
-              } else if (errMsg.includes('not found')) {
-                errorMessage = 'Network not found. Please check the SSID.'
-              }
             }
 
-            const errorEl = document.getElementById('error')
             errorEl.innerHTML = `<span class="message-icon">❌</span> ${errorMessage}`
             errorEl.className = 'err'
             errorEl.style.animation = 'fadeIn 0.5s forwards'
             resultEl.innerText = ''
+
+            // Keep error visible - don't auto-clear
           }
         } catch (e) {
           console.error('Connection error:', e)
@@ -647,7 +656,6 @@
           connectBtn.classList.remove('loading')
         }
       }
-
       document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('scanBtn').onclick = scan
         document.getElementById('connectBtn').onclick = connect
