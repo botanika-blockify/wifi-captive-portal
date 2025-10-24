@@ -8,6 +8,9 @@
       rel="stylesheet"
     />
     <style>
+      * {
+        box-sizing: border-box;
+      }
       body {
         background: #181c20;
         color: #fff;
@@ -17,6 +20,7 @@
         justify-content: center;
         height: 100vh;
         margin: 0;
+        padding: 16px;
       }
       .wrap {
         background: #23272b;
@@ -25,30 +29,43 @@
         box-shadow: 0 8px 32px rgba(0, 189, 143, 0.1);
         text-align: center;
         max-width: 420px;
-        margin: 20px;
+        width: 100%;
+        border: 1px solid #2f343b;
+      }
+      .success-icon {
+        font-size: 48px;
+        margin-bottom: 20px;
       }
       .ok {
         color: #00bd8f;
         font-size: 24px;
         font-weight: 700;
-        margin-bottom: 20px;
+        margin-bottom: 16px;
       }
       .desc {
         color: #a0a6b0;
         font-size: 16px;
-        margin-bottom: 20px;
+        margin-bottom: 24px;
         line-height: 1.5;
       }
       .logo {
-        width: 160px;
+        width: 140px;
         margin-bottom: 24px;
       }
       .thanks {
         font-size: 18px;
         margin-top: 20px;
-        color: #ff7125;
+        color: #f28c38;
         font-weight: 700;
         letter-spacing: 0.5px;
+      }
+      .info {
+        background: #181c20;
+        padding: 12px;
+        border-radius: 8px;
+        margin: 20px 0;
+        font-size: 14px;
+        color: #a0a6b0;
       }
     </style>
   </head>
@@ -60,8 +77,12 @@
         class="logo"
       />
       <div class="ok">Setup Successful!</div>
-      <div class="desc">Your board is now connected to Wi-Fi.<br />You can close this page.</div>
-      <div class="thanks">Thank you for using Botanika!</div>
+      <div class="desc">
+        Your device is now connected to Wi-Fi.<br />
+        You can close this page and start using your device.
+      </div>
+      <div class="info">The device will maintain this connection automatically.</div>
+      <div class="thanks">Thank you for choosing our product!</div>
     </div>
   </body>
 </html>

@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1"
     />
-    <title>Wi-Fi Setup</title>
+    <title>Connect to Wi-Fi</title>
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap"
       rel="stylesheet"
@@ -436,13 +436,11 @@
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
             >
-              <!-- Eye open icon -->
               <path
                 d="M12 4.5C7 4.5 2.73 7.61 1 12C2.73 16.39 7 19.5 12 19.5C17 19.5 21.27 16.39 23 12C21.27 7.61 17 4.5 12 4.5ZM12 17C9.24 17 7 14.76 7 12C7 9.24 9.24 7 12 7C14.76 7 17 9.24 17 12C17 14.76 14.76 17 12 17ZM12 9C10.34 9 9 10.34 9 12C9 13.66 10.34 15 12 15C13.66 15 15 13.66 15 12C15 10.34 13.66 9 12 9Z"
                 fill="currentColor"
                 class="eye-open"
               />
-              <!-- Eye closed icon -->
               <path
                 d="M12 7C14.76 7 17 9.24 17 12C17 12.65 16.87 13.26 16.64 13.83L19.56 16.75C21.07 15.49 22.26 13.86 22.99 12C21.26 7.61 16.99 4.5 11.99 4.5C10.59 4.5 9.25 4.75 8.01 5.2L10.17 7.36C10.74 7.13 11.35 7 12 7ZM2 4.27L4.28 6.55L4.74 7.01C3.08 8.3 1.78 10.02 1 12C2.73 16.39 7 19.5 12 19.5C13.55 19.5 15.03 19.2 16.38 18.66L16.8 19.08L19.73 22L21 20.73L3.27 3L2 4.27ZM7.53 9.8L9.08 11.35C9.03 11.56 9 11.78 9 12C9 13.66 10.34 15 12 15C12.22 15 12.44 14.97 12.65 14.92L14.2 16.47C13.53 16.8 12.79 17 12 17C9.24 17 7 14.76 7 12C7 11.21 7.2 10.47 7.53 9.8ZM11.84 9.02L14.99 12.17L15.01 12.01C15.01 10.35 13.67 9.01 12.01 9.01L11.84 9.02Z"
                 fill="currentColor"
@@ -461,7 +459,6 @@
         <span>Connect</span><span class="loader"></span>
       </button>
 
-      <!-- Status messages placed directly without container -->
       <p
         id="result"
         class="muted"
@@ -487,7 +484,6 @@
         successEl.style.animation = 'none'
         errorEl.className = ''
 
-        // Force reflow
         void errorEl.offsetWidth
         void successEl.offsetWidth
       }
@@ -535,12 +531,12 @@
             for (let n of currentNetworks) {
               const signalIcon = createSignalIcon(n.signal)
               list += `
-                    <div class="ssid" onclick="selectSSID('${n.ssid.replace(/'/g, "\\'")}')">
-                        <div class="ssid-info">
-                            <b>${n.ssid}</b>
-                        </div>
-                        ${signalIcon}
-                    </div>`
+                <div class="ssid" onclick="selectSSID('${n.ssid.replace(/'/g, "\\'")}')">
+                  <div class="ssid-info">
+                    <b>${n.ssid}</b>
+                  </div>
+                  ${signalIcon}
+                </div>`
             }
             ssidList.innerHTML = list
           } else {
@@ -585,7 +581,6 @@
         const ssid = document.getElementById('ssidInput').value.trim()
         const password = document.getElementById('pwdInput').value.trim()
 
-        // Basic validation
         if (!ssid) {
           const errorEl = document.getElementById('error')
           errorEl.innerHTML = '<span class="message-icon">❌</span> Please enter a network name'
@@ -606,7 +601,6 @@
           })
 
           let data = await res.json()
-          console.log('API Response:', data) // Debug log
 
           if (data.ok) {
             document.getElementById('success').innerHTML = '<span class="message-icon">✅</span> Connected successfully!'
@@ -616,33 +610,11 @@
               window.location.href = '/success.html'
             }, 2000)
           } else {
-            // ALWAYS SHOW ERROR - don't let it disappear
             const errorEl = document.getElementById('error')
-            let errorMessage = 'Unable to connect to network'
-
-            // Check all possible error indicators
-            if (data.error === 'wrong_password') {
-              errorMessage = 'Incorrect Wi-Fi password!'
-            } else if (
-              data.stderr &&
-              (data.stderr.toLowerCase().includes('password') ||
-                data.stderr.toLowerCase().includes('secrets') ||
-                data.stderr.toLowerCase().includes('wrong') ||
-                data.stderr.toLowerCase().includes('incorrect') ||
-                data.stderr.toLowerCase().includes('802.11') ||
-                data.stderr.toLowerCase().includes('wpa'))
-            ) {
-              errorMessage = 'Incorrect Wi-Fi password!'
-            } else if (data.error === 'network_not_found') {
-              errorMessage = 'Network not found. Please check the SSID.'
-            }
-
-            errorEl.innerHTML = `<span class="message-icon">❌</span> ${errorMessage}`
+            errorEl.innerHTML = '<span class="message-icon">❌</span> Unable to join this network. Please try again.'
             errorEl.className = 'err'
             errorEl.style.animation = 'fadeIn 0.5s forwards'
             resultEl.innerText = ''
-
-            // Keep error visible - don't auto-clear
           }
         } catch (e) {
           console.error('Connection error:', e)
@@ -656,6 +628,7 @@
           connectBtn.classList.remove('loading')
         }
       }
+
       document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('scanBtn').onclick = scan
         document.getElementById('connectBtn').onclick = connect
