@@ -160,7 +160,6 @@ def api_health():
         "version": "1.0.0"
     })
 
-# Captive portal detection endpoints
 @app.get("/generate_204")
 @app.get("/gen_204")
 @app.get("/library/test/success.html")
@@ -172,15 +171,24 @@ def api_health():
 def captive_probes():
     return redirect("/", code=302)
 
-@app.get("/")
+@app.route("/")
 def serve_index():
     return send_from_directory(FRONTEND_DIR, "index.html")
 
+@app.route("/success.html")
+def serve_success():
+    return send_from_directory(FRONTEND_DIR, "success.html")
+
+@app.route("/public/<path:filename>")
+def serve_static(filename):
+    return send_from_directory(os.path.join(FRONTEND_DIR, "public"), filename)
+
 @app.route("/<path:path>")
 def serve_frontend(path):
-    if not os.path.exists(os.path.join(FRONTEND_DIR, path)):
-        return send_from_directory(FRONTEND_DIR, "index.html")
-    return send_from_directory(FRONTEND_DIR, path)
+    if os.path.exists(os.path.join(FRONTEND_DIR, path)):
+        return send_from_directory(FRONTEND_DIR, path)
+
+    return send_from_directory(FRONTEND_DIR, "index.html")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=80, debug=False)
