@@ -504,7 +504,7 @@
         const bars = getSignalBars(signal)
         let html = '<div class="signal-strength">'
         for (let i = 0; i < 4; i++) {
-          const height = 4 + i * 3 // 4px, 7px, 10px, 13px
+          const height = 4 + i * 3
           const isActive = i < bars
           html += `<div class="signal-bar ${isActive ? 'active' : ''}" style="height: ${height}px;"></div>`
         }
@@ -524,7 +524,6 @@
         scanningOverlay.classList.add('active')
 
         try {
-          // Simulate API call delay for better UX
           await new Promise((resolve) => setTimeout(resolve, 600))
 
           let res = await fetch('/api/scan')
@@ -536,12 +535,12 @@
             for (let n of currentNetworks) {
               const signalIcon = createSignalIcon(n.signal)
               list += `
-                <div class="ssid" onclick="selectSSID('${n.ssid.replace(/'/g, "\\'")}')">
-                  <div class="ssid-info">
-                    <b>${n.ssid}</b>
-                  </div>
-                  ${signalIcon}
-                </div>`
+                    <div class="ssid" onclick="selectSSID('${n.ssid.replace(/'/g, "\\'")}')">
+                        <div class="ssid-info">
+                            <b>${n.ssid}</b>
+                        </div>
+                        ${signalIcon}
+                    </div>`
             }
             ssidList.innerHTML = list
           } else {
@@ -560,7 +559,6 @@
 
       function selectSSID(ssid) {
         document.getElementById('ssidInput').value = ssid
-        // Auto-focus on password field for better UX
         document.getElementById('pwdInput').focus()
       }
 
@@ -587,7 +585,6 @@
         const ssid = document.getElementById('ssidInput').value.trim()
         const password = document.getElementById('pwdInput').value.trim()
 
-        // Basic validation
         if (!ssid) {
           const errorEl = document.getElementById('error')
           errorEl.innerHTML = '<span class="message-icon">❌</span> Please enter a network name'
@@ -606,28 +603,34 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ssid, password }),
           })
+
           let data = await res.json()
+
           if (data.ok) {
             document.getElementById('success').innerHTML = '<span class="message-icon">✅</span> Connected successfully!'
             document.getElementById('success').style.animation = 'fadeIn 0.5s forwards'
+
             setTimeout(() => {
-              window.location.href = 'success.html'
-            }, 1200)
+              window.location.href = '/success.html'
+            }, 2000)
           } else {
-            let errMsg = (data.stderr || 'Failed').toLowerCase()
-            const errorEl = document.getElementById('error')
-            if (
-              errMsg.includes('wrong password') ||
-              errMsg.includes('secrets were required') ||
-              errMsg.includes('no secrets were provided') ||
-              errMsg.includes('failed to activate connection')
-            ) {
-              errorEl.innerHTML = '<span class="message-icon">❌</span> Incorrect Wi-Fi password!'
-            } else if (errMsg.includes('network not found')) {
-              errorEl.innerHTML = '<span class="message-icon">❌</span> Network not found. Please check the SSID.'
-            } else {
-              errorEl.innerHTML = '<span class="message-icon">❌</span> Unable to connect to network.'
+            let errorMessage = 'Unable to connect to network'
+
+            if (data.error === 'wrong_password') {
+              errorMessage = 'Incorrect Wi-Fi password!'
+            } else if (data.error === 'network_not_found') {
+              errorMessage = 'Network not found. Please check the SSID.'
+            } else if (data.stderr) {
+              let errMsg = data.stderr.toLowerCase()
+              if (errMsg.includes('secrets') || errMsg.includes('password') || errMsg.includes('wrong')) {
+                errorMessage = 'Incorrect Wi-Fi password!'
+              } else if (errMsg.includes('not found')) {
+                errorMessage = 'Network not found. Please check the SSID.'
+              }
             }
+
+            const errorEl = document.getElementById('error')
+            errorEl.innerHTML = `<span class="message-icon">❌</span> ${errorMessage}`
             errorEl.className = 'err'
             errorEl.style.animation = 'fadeIn 0.5s forwards'
             resultEl.innerText = ''
@@ -645,15 +648,12 @@
         }
       }
 
-      // Initialize - Gọi scan() ngay khi trang load
       document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('scanBtn').onclick = scan
         document.getElementById('connectBtn').onclick = connect
 
-        // Auto-scan on page load - Gọi trực tiếp không delay
         scan()
 
-        // Enter key support
         document.getElementById('pwdInput').addEventListener('keypress', function (e) {
           if (e.key === 'Enter') {
             connect()

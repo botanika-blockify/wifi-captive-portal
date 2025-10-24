@@ -32,14 +32,33 @@ def api_connect():
     data = request.get_json(silent=True) or {}
     ssid = (data.get("ssid") or "").strip()
     pwd = (data.get("password") or "").strip()
+    
     if not ssid:
         return jsonify({"ok": False, "error": "SSID required"}), 400
+    
+    # Escape single quotes in SSID and password for shell safety
+    ssid_escaped = ssid.replace("'", "'\\''")
+    pwd_escaped = pwd.replace("'", "'\\''") if pwd else ""
+    
     if pwd:
-        cmd = f"nmcli dev wifi connect '{ssid}' password '{pwd}' ifname {WIFI_IFACE}"
+        cmd = f"nmcli dev wifi connect '{ssid_escaped}' password '{pwd_escaped}' ifname {WIFI_IFACE}"
     else:
-        cmd = f"nmcli dev wifi connect '{ssid}' ifname {WIFI_IFACE}"
+        cmd = f"nmcli dev wifi connect '{ssid_escaped}' ifname {WIFI_IFACE}"
+    
     code, out, err = run(cmd)
-    return jsonify({"ok": code == 0, "stdout": out, "stderr": err}), (200 if code == 0 else 500)
+    
+    # Improved error detection
+    if code == 0:
+        return jsonify({"ok": True, "stdout": out, "stderr": err})
+    else:
+        # Better error message parsing
+        error_msg = err.lower() if err else out.lower()
+        if any(word in error_msg for word in ["secrets", "password", "wrong", "incorrect"]):
+            return jsonify({"ok": False, "error": "wrong_password", "stderr": err, "stdout": out}), 400
+        elif "not found" in error_msg:
+            return jsonify({"ok": False, "error": "network_not_found", "stderr": err, "stdout": out}), 400
+        else:
+            return jsonify({"ok": False, "error": "connection_failed", "stderr": err, "stdout": out}), 400
 
 @app.get("/api/status")
 def api_status():
