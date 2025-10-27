@@ -8,7 +8,6 @@ WIFI_IFACE = "wlan0"
 
 app = Flask(__name__, static_folder=None)
 
-# Configuration
 class Config:
     MAX_CONNECTION_ATTEMPTS = 3
     CONNECTION_TIMEOUT = 30
@@ -33,7 +32,6 @@ def validate_ssid(ssid):
     """Validate SSID to prevent injection attacks"""
     if not ssid or len(ssid) > 32:
         return False
-    # Allow common SSID characters
     import re
     if not re.match(r'^[a-zA-Z0-9_\-\.\s]+$', ssid):
         return False
@@ -80,7 +78,6 @@ def api_connect():
     ssid = (data.get("ssid") or "").strip()
     pwd = (data.get("password") or "").strip()
     
-    # Input validation
     if not ssid:
         return jsonify({"ok": False, "error": "SSID required"}), 400
     
@@ -90,17 +87,14 @@ def api_connect():
     if not validate_password(pwd):
         return jsonify({"ok": False, "error": "Invalid password"}), 400
     
-    # Escape for shell safety
     ssid_escaped = ssid.replace("'", "'\\''")
     pwd_escaped = pwd.replace("'", "'\\''") if pwd else ""
     
-    # Build connection command
     if pwd:
         cmd = f"nmcli dev wifi connect '{ssid_escaped}' password '{pwd_escaped}' ifname {WIFI_IFACE}"
     else:
         cmd = f"nmcli dev wifi connect '{ssid_escaped}' ifname {WIFI_IFACE}"
     
-    # Try connection with retries
     for attempt in range(Config.MAX_CONNECTION_ATTEMPTS):
         code, out, err = run(cmd, timeout=Config.CONNECTION_TIMEOUT)
         
@@ -109,18 +103,15 @@ def api_connect():
                 "ok": True, 
                 "message": "Connected successfully",
                 "attempts": attempt + 1
-            })
+            }), 200
         
-        # Wait before retry
         if attempt < Config.MAX_CONNECTION_ATTEMPTS - 1:
             time.sleep(2)
     
-    # All attempts failed
     return jsonify({
         "ok": False, 
         "error": "Unable to join this network",
-        "attempts": Config.MAX_CONNECTION_ATTEMPTS
-    }), 400
+        "attempts": Config.MAX_CONNECTION_ATTEMPTS}), 400
 
 @app.get("/api/status")
 def api_status():

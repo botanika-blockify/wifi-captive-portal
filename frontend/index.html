@@ -601,7 +601,7 @@
           })
 
           let data = await res.json()
-
+          console.log('Response data:', data)
           if (data.ok) {
             document.getElementById('success').innerHTML = '<span class="message-icon">✅</span> Connected successfully!'
             document.getElementById('success').style.animation = 'fadeIn 0.5s forwards'
