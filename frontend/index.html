@@ -572,7 +572,6 @@
           eyeClosed.style.display = 'none'
         }
       }
-
       async function connect() {
         clearMessages()
         const connectBtn = document.getElementById('connectBtn')
@@ -601,23 +600,22 @@
           })
 
           let data = await res.json()
-          console.log('Response data:', data)
-          if (data.ok) {
-            document.getElementById('success').innerHTML = '<span class="message-icon">✅</span> Connected successfully!'
-            document.getElementById('success').style.animation = 'fadeIn 0.5s forwards'
 
-            setTimeout(() => {
-              window.location.href = '/success.html'
-            }, 2000)
+          if (res.status === 200 && data.ok) {
+            const successEl = document.getElementById('success')
+            successEl.innerHTML = '<span class="message-icon">✅</span> Connected successfully! You can now close this page.'
+            successEl.className = 'ok'
+            successEl.style.animation = 'fadeIn 0.5s forwards'
+            resultEl.innerText = ''
           } else {
             const errorEl = document.getElementById('error')
-            errorEl.innerHTML = '<span class="message-icon">❌</span> Unable to join this network. Please try again.'
+            const errorMsg = data.error || 'Unable to join this network. Please try again.'
+            errorEl.innerHTML = `<span class="message-icon">❌</span> ${errorMsg}`
             errorEl.className = 'err'
             errorEl.style.animation = 'fadeIn 0.5s forwards'
             resultEl.innerText = ''
           }
         } catch (e) {
-          console.error('Connection error:', e)
           const errorEl = document.getElementById('error')
           errorEl.innerHTML = '<span class="message-icon">❌</span> Connection failed. Please try again.'
           errorEl.className = 'err'
@@ -628,7 +626,6 @@
           connectBtn.classList.remove('loading')
         }
       }
-
       document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('scanBtn').onclick = scan
         document.getElementById('connectBtn').onclick = connect
