@@ -9,7 +9,7 @@ WIFI_IFACE = "wlan0"
 app = Flask(__name__, static_folder=None)
 
 class Config:
-    MAX_CONNECTION_ATTEMPTS = 3
+    MAX_CONNECTION_ATTEMPTS = 1
     CONNECTION_TIMEOUT = 30
     SCAN_TIMEOUT = 10
 
