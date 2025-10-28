@@ -4,7 +4,7 @@ from flask import Flask, request, jsonify, send_from_directory, redirect
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "frontend"))
-WIFI_IFACE = "wlan0"
+WIFI_IFACE = "wlP2p33s0"
 
 app = Flask(__name__, static_folder=None)
 
