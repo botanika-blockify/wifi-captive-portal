@@ -14,7 +14,6 @@ class Config:
     SCAN_TIMEOUT = 10
 
 def run(cmd: str, timeout=30):
-    """Run command with timeout"""
     try:
         p = subprocess.Popen(shlex.split(cmd), 
                            stdout=subprocess.PIPE, 
@@ -29,7 +28,6 @@ def run(cmd: str, timeout=30):
         return -1, "", str(e)
 
 def validate_ssid(ssid):
-    """Validate SSID to prevent injection attacks"""
     if not ssid or len(ssid) > 32:
         return False
     import re
@@ -38,14 +36,12 @@ def validate_ssid(ssid):
     return True
 
 def validate_password(password):
-    """Validate password length"""
     if password and len(password) > 64:
         return False
     return True
 
 @app.get("/api/scan")
 def api_scan():
-    """Scan for available Wi-Fi networks"""
     try:
         code, out, err = run("nmcli -t -f SSID,SIGNAL,SECURITY dev wifi list", 
                            timeout=Config.SCAN_TIMEOUT)
@@ -73,7 +69,6 @@ def api_scan():
 
 @app.post("/api/connect")
 def api_connect():
-    """Connect to Wi-Fi network"""
     data = request.get_json(silent=True) or {}
     ssid = (data.get("ssid") or "").strip()
     pwd = (data.get("password") or "").strip()
@@ -83,9 +78,6 @@ def api_connect():
     
     if not validate_ssid(ssid):
         return jsonify({"ok": False, "error": "Invalid SSID"}), 400
-        
-    if not validate_password(pwd):
-        return jsonify({"ok": False, "error": "Invalid password"}), 400
     
     ssid_escaped = ssid.replace("'", "'\\''")
     pwd_escaped = pwd.replace("'", "'\\''") if pwd else ""
@@ -97,6 +89,8 @@ def api_connect():
     
     for attempt in range(Config.MAX_CONNECTION_ATTEMPTS):
         code, out, err = run(cmd, timeout=Config.CONNECTION_TIMEOUT)
+
+        print(f"Attempt {attempt + 1}: cmd='{cmd}' code={code} out='{out}' err='{err}'")
         
         if code == 0:
             return jsonify({
@@ -115,18 +109,13 @@ def api_connect():
 
 @app.get("/api/status")
 def api_status():
-    """Get current connection status"""
     try:
-        # Get IP address
         code_ip, out_ip, _ = run(f"ip -br addr show dev {WIFI_IFACE}")
         
-        # Get default route
         code_rt, out_rt, _ = run("ip route show default")
         
-        # Check internet connectivity
         code_ping, _, _ = run("ping -c1 -w2 8.8.8.8")
         
-        # Get current connection info
         code_conn, out_conn, _ = run("nmcli -t connection show --active")
         
         return jsonify({
@@ -143,7 +132,6 @@ def api_status():
 
 @app.get("/api/health")
 def api_health():
-    """Health check endpoint for monitoring"""
     return jsonify({
         "status": "healthy",
         "service": "wifi-portal",
