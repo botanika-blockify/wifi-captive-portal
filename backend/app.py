@@ -1,6 +1,6 @@
 import os, subprocess, shlex
 import time
-from flask import Flask, request, jsonify, send_from_directory, redirect
+from flask import Flask, request, jsonify, send_from_directory, redirect, Response
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "frontend"))
@@ -139,18 +139,92 @@ def api_health():
         "version": "1.0.0"
     })
 
+# Enhanced Captive Portal Detection Endpoints
 @app.get("/generate_204")
+def generate_204():
+    """Android captive portal check - should return 204 No Content"""
+    return "", 204
+
 @app.get("/gen_204")
+def gen_204():
+    """Alternative Android captive portal check"""
+    return "", 204
+
 @app.get("/library/test/success.html")
-@app.get("/hotspot-detect.html")
-@app.get("/hotspot-detect")
-@app.get("/ncsi.txt")
-@app.get("/connecttest.txt")
-@app.get("/redirect")
-def captive_probes():
+def library_test_success():
+    """iOS captive portal check"""
     return redirect("/", code=302)
 
-@app.route("/")
+@app.get("/hotspot-detect.html")
+def hotspot_detect_html():
+    """macOS and iOS captive portal check"""
+    html_content = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta http-equiv="refresh" content="0;url=/">
+        <title>Network Authentication Required</title>
+    </head>
+    <body>
+        <p>Redirecting to authentication page...</p>
+    </body>
+    </html>
+    """
+    return Response(html_content, mimetype='text/html')
+
+@app.get("/hotspot-detect")
+def hotspot_detect():
+    """macOS captive portal check"""
+    return redirect("/", code=302)
+
+@app.get("/ncsi.txt")
+def ncsi_txt():
+    """Windows captive portal check"""
+    return Response("Microsoft NCSI", mimetype='text/plain')
+
+@app.get("/connecttest.txt")
+def connecttest_txt():
+    """Windows captive portal check"""
+    return Response("success", mimetype='text/plain')
+
+@app.get("/redirect")
+def redirect_captive():
+    """Generic redirect for captive portals"""
+    return redirect("/", code=302)
+
+@app.get("/captiveportal")
+def captiveportal():
+    """Generic captive portal endpoint"""
+    return redirect("/", code=302)
+
+@app.get("/fs/captiveportal")
+def fs_captiveportal():
+    """Firefox captive portal check"""
+    return "", 204
+
+@app.get("/success.txt")
+def success_txt():
+    """Some Android versions"""
+    return Response("success", mimetype='text/plain')
+
+@app.get("/canonical.html")
+def canonical_html():
+    """Chrome OS captive portal check"""
+    html_content = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta http-equiv="refresh" content="0;url=/">
+        <title>Redirecting</title>
+    </head>
+    <body>
+        <p>Redirecting to authentication page...</p>
+    </body>
+    </html>
+    """
+    return Response(html_content, mimetype='text/html')
+
+@app.get("/")
 def serve_index():
     return send_from_directory(FRONTEND_DIR, "index.html")
 
@@ -166,7 +240,6 @@ def serve_static(filename):
 def serve_frontend(path):
     if os.path.exists(os.path.join(FRONTEND_DIR, path)):
         return send_from_directory(FRONTEND_DIR, path)
-
     return send_from_directory(FRONTEND_DIR, "index.html")
 
 if __name__ == "__main__":
