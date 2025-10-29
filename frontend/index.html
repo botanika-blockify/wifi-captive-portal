@@ -508,6 +508,20 @@
         return html
       }
 
+      function removeDuplicateNetworks(networks) {
+        const uniqueNetworks = []
+        const seenSSIDs = new Set()
+
+        for (const network of networks) {
+          if (!seenSSIDs.has(network.ssid)) {
+            seenSSIDs.add(network.ssid)
+            uniqueNetworks.push(network)
+          }
+        }
+
+        return uniqueNetworks
+      }
+
       async function scan() {
         clearMessages()
         const scanBtn = document.getElementById('scanBtn')
@@ -524,7 +538,9 @@
 
           let res = await fetch('/api/scan')
           let data = await res.json()
-          currentNetworks = data.networks || []
+
+          // Remove duplicate networks before storing
+          currentNetworks = removeDuplicateNetworks(data.networks || [])
 
           let list = ''
           if (currentNetworks.length > 0) {
@@ -572,6 +588,7 @@
           eyeClosed.style.display = 'none'
         }
       }
+
       async function connect() {
         clearMessages()
         const connectBtn = document.getElementById('connectBtn')
@@ -626,6 +643,7 @@
           connectBtn.classList.remove('loading')
         }
       }
+
       document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('scanBtn').onclick = scan
         document.getElementById('connectBtn').onclick = connect
