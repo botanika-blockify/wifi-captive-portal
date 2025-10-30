@@ -27,6 +27,30 @@ def run(cmd: str, timeout=30):
     except Exception as e:
         return -1, "", str(e)
 
+def restore_ap_mode():
+    try:
+        run("pkill wpa_supplicant", timeout=5)
+        run("pkill dhclient", timeout=5)
+        
+        run(f"ip link set {WIFI_IFACE} down", timeout=5)
+        time.sleep(2)
+        
+        run(f"iwconfig {WIFI_IFACE} mode master", timeout=5)
+        
+        run(f"ip link set {WIFI_IFACE} up", timeout=5)
+        time.sleep(2)
+        
+        run(f"ifconfig {WIFI_IFACE} 192.168.4.1 netmask 255.255.255.0 up", timeout=5)
+        
+        run("systemctl restart hostapd", timeout=10)
+        
+        run("systemctl restart dnsmasq", timeout=10)
+        
+        return True
+        
+    except Exception as e:
+        return False
+
 def validate_ssid(ssid):
     if not ssid or len(ssid) > 32:
         return False
@@ -60,7 +84,6 @@ def api_scan():
                             "security": security
                         })
         
-        # Sort by signal strength (strongest first)
         networks.sort(key=lambda x: x["signal"] or 0, reverse=True)
         return jsonify({"ok": True, "networks": networks})
     
@@ -79,6 +102,9 @@ def api_connect():
     if not validate_ssid(ssid):
         return jsonify({"ok": False, "error": "Invalid SSID"}), 400
     
+    if not validate_password(pwd):
+        return jsonify({"ok": False, "error": "Invalid password"}), 400
+    
     ssid_escaped = ssid.replace("'", "'\\''")
     pwd_escaped = pwd.replace("'", "'\\''") if pwd else ""
     
@@ -87,35 +113,52 @@ def api_connect():
     else:
         cmd = f"nmcli dev wifi connect '{ssid_escaped}' ifname {WIFI_IFACE}"
     
+    connection_success = False
+    connection_error = "Unable to join this network"
+    
     for attempt in range(Config.MAX_CONNECTION_ATTEMPTS):
         code, out, err = run(cmd, timeout=Config.CONNECTION_TIMEOUT)
-
-        print(f"Attempt {attempt + 1}: cmd='{cmd}' code={code} out='{out}' err='{err}'")
         
         if code == 0:
-            return jsonify({
-                "ok": True, 
-                "message": "Connected successfully",
-                "attempts": attempt + 1
-            }), 200
+            connection_success = True
+            break
+        
+        error_output = (out + " " + err).lower()
+        if any(keyword in error_output for keyword in ["secrets", "password", "802.11", "auth"]):
+            connection_error = "Incorrect password"
+            break
+        elif "no network" in error_output or "not found" in error_output:
+            connection_error = "Network not available"
+            break
         
         if attempt < Config.MAX_CONNECTION_ATTEMPTS - 1:
             time.sleep(2)
     
-    return jsonify({
-        "ok": False, 
-        "error": "Unable to join this network",
-        "attempts": Config.MAX_CONNECTION_ATTEMPTS}), 400
+    if connection_success:
+        return jsonify({
+            "ok": True, 
+            "message": "Connected successfully"
+        }), 200
+    else:
+        restore_success = restore_ap_mode()
+        
+        if restore_success:
+            connection_error += ". AP mode has been restored."
+        else:
+            connection_error += ". AP mode restoration may be needed."
+            
+        return jsonify({
+            "ok": False, 
+            "error": connection_error,
+            "ap_restored": restore_success
+        }), 400
 
 @app.get("/api/status")
 def api_status():
     try:
         code_ip, out_ip, _ = run(f"ip -br addr show dev {WIFI_IFACE}")
-        
         code_rt, out_rt, _ = run("ip route show default")
-        
         code_ping, _, _ = run("ping -c1 -w2 8.8.8.8")
-        
         code_conn, out_conn, _ = run("nmcli -t connection show --active")
         
         return jsonify({
@@ -139,25 +182,28 @@ def api_health():
         "version": "1.0.0"
     })
 
-# Enhanced Captive Portal Detection Endpoints
+@app.get("/api/restore-ap")
+def api_restore_ap():
+    success = restore_ap_mode()
+    if success:
+        return jsonify({"ok": True, "message": "AP mode restored successfully"})
+    else:
+        return jsonify({"ok": False, "error": "Failed to restore AP mode"}), 500
+
 @app.get("/generate_204")
 def generate_204():
-    """Android captive portal check - should return 204 No Content"""
     return "", 204
 
 @app.get("/gen_204")
 def gen_204():
-    """Alternative Android captive portal check"""
     return "", 204
 
 @app.get("/library/test/success.html")
 def library_test_success():
-    """iOS captive portal check"""
     return redirect("/", code=302)
 
 @app.get("/hotspot-detect.html")
 def hotspot_detect_html():
-    """macOS and iOS captive portal check"""
     html_content = """
     <!DOCTYPE html>
     <html>
@@ -174,42 +220,34 @@ def hotspot_detect_html():
 
 @app.get("/hotspot-detect")
 def hotspot_detect():
-    """macOS captive portal check"""
     return redirect("/", code=302)
 
 @app.get("/ncsi.txt")
 def ncsi_txt():
-    """Windows captive portal check"""
     return Response("Microsoft NCSI", mimetype='text/plain')
 
 @app.get("/connecttest.txt")
 def connecttest_txt():
-    """Windows captive portal check"""
     return Response("success", mimetype='text/plain')
 
 @app.get("/redirect")
 def redirect_captive():
-    """Generic redirect for captive portals"""
     return redirect("/", code=302)
 
 @app.get("/captiveportal")
 def captiveportal():
-    """Generic captive portal endpoint"""
     return redirect("/", code=302)
 
 @app.get("/fs/captiveportal")
 def fs_captiveportal():
-    """Firefox captive portal check"""
     return "", 204
 
 @app.get("/success.txt")
 def success_txt():
-    """Some Android versions"""
     return Response("success", mimetype='text/plain')
 
 @app.get("/canonical.html")
 def canonical_html():
-    """Chrome OS captive portal check"""
     html_content = """
     <!DOCTYPE html>
     <html>
