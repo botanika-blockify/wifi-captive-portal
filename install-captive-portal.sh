@@ -1,7 +1,7 @@
 #!/bin/bash
 # Full Auto-Setup Script for WiFi Captive Portal
-# Run after system boot or manually: sudo ./install-captive-portal.sh
-# Must be executed from /userdata/wifi-captive-portal directory after clone
+# Run: sudo ./install-captive-portal.sh
+# Automatically clones, sets up venv, installs Flask, configures AP
 
 set -e
 
@@ -17,11 +17,14 @@ cd /userdata/wifi-captive-portal
 # === 2. Install System Dependencies ===
 echo "Installing system packages..."
 sudo apt update
-sudo apt install -y hostapd dnsmasq python3-pip net-tools iw
+sudo apt install -y hostapd dnsmasq python3-pip python3-venv net-tools iw
 
-# === 3. Install Python Dependencies ===
-echo "Installing Python requirements..."
-pip3 install -r backend/requirements.txt
+# === 3. Setup Virtual Environment + Install Flask ===
+echo "Setting up Python virtual environment and installing Flask..."
+sudo mkdir -p /userdata/wifi-captive-portal/venv
+python3 -m venv /userdata/wifi-captive-portal/venv
+/userdata/wifi-captive-portal/venv/bin/pip install --upgrade pip > /dev/null 2>&1
+/userdate/wifi-captive-portal/venv/bin/pip install Flask > /dev/null 2>&1
 
 # === 4. Force WiFi Interface to wlan0 (nl80211 + AP support) ===
 echo "Detecting and renaming WiFi interface to wlan0..."
@@ -36,7 +39,7 @@ if [ -n "$WIFI_DEV" ] && [ "$WIFI_DEV" != "wlan0" ]; then
     sudo ip link set dev "$WIFI_DEV" down 2>/dev/null || true
     sudo ip link set dev "$WIFI_DEV" name wlan0 2>/dev/null || true
     sudo ip link set dev wlan0 up
-    echo "Renamed $WIFI_DEV → wlan0"
+    echo "Renamed $WIFI_DEV to wlan0"
 else
     echo "Interface is already wlan0 or no compatible device found"
 fi
@@ -81,8 +84,8 @@ ExecStart=/usr/local/bin/setup-wlan0-static.sh
 WantedBy=multi-user.target
 EOF
 
-# === 7. Create wifi-portal.service ===
-echo "Creating wifi-portal.service..."
+# === 7. Create wifi-portal.service (using venv) ===
+echo "Creating wifi-portal.service with virtual environment..."
 sudo tee /etc/systemd/system/wifi-portal.service > /dev/null << 'EOF'
 [Unit]
 Description=WiFi Captive Portal Backend
@@ -92,7 +95,7 @@ Wants=dnsmasq.service hostapd.service
 [Service]
 Type=simple
 WorkingDirectory=/userdata/wifi-captive-portal/backend
-ExecStart=/usr/bin/python3 /userdata/wifi-captive-portal/backend/app.py
+ExecStart=/userdata/wifi-captive-portal/venv/bin/python /userdata/wifi-captive-portal/backend/app.py
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
@@ -176,4 +179,4 @@ sudo systemctl status wlan0-static hostapd dnsmasq wifi-portal --no-pager | cat
 
 echo ""
 echo "Connect to WiFi: NIMBUS-Setup | Pass: botanika"
-echo "Open browser → http://192.168.4.1"
+echo "Open browser to http://192.168.4.1"
