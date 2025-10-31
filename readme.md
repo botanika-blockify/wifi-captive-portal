@@ -1,214 +1,219 @@
-# Wi-Fi Captive Portal
+```markdown
+# WiFi Captive Portal Setup Guide
+A complete WiFi Access Point with captive portal authentication system for embedded devices.
+## Requirements
+- Linux-based system (tested on Debian/Ubuntu/Embedded Linux)
+- WiFi adapter supporting AP mode
+- Python 3.7+
+- Root access
+- Systemd init system
+## Quick Installation
+```bash
+sudo mkdir -p /userdata/wifi-captive-portal && \
+sudo git clone https://github.com/botanika-blockify/wifi-captive-portal.git /userdata/wifi-captive-portal && \
+sudo chmod +x /userdata/wifi-captive-portal/install-captive-portal.sh && \
+sudo /userdata/wifi-captive-portal/install-captive-portal.sh
+```
+## Munual Installation
+### 1. Clone Repository to /userdata
+```bash
+sudo mkdir -p /userdata
+sudo git clone https://github.com/botanika-blockify/wifi-captive-portal.git /userdata/wifi-captive-portal
+cd /userdata/wifi-captive-portal
+```
+### 2. Install Dependencies
+```bash
+sudo apt update
+sudo apt install hostapd dnsmasq python3-pip net-tools iw
+pip3 install -r backend/requirements.txt
+```
+### 3. WiFi Driver Setup
+#### Check Your WiFi Hardware
+```bash
+iw dev
+cat /sys/class/net/$(iw dev | grep Interface | cut -d' ' -f2)/device/uevent | grep DRIVER
+iw list | grep -A 10 "Supported interface modes" | grep "AP"
+```
+#### Force nl80211 Interface to wlan0
+```bash
+WIFI_DEV=$(iw dev | awk '/Interface/ {print $2}' | while read dev; do \
+    if iw list | grep -A 20 "Interface $dev" | grep -q "nl80211" && \
+       iw list | grep -A 10 "Supported interface modes" | grep -q "AP"; then \
+        echo "$dev"; break; \
+    fi; \
+done)
 
-A simple and elegant Wi-Fi captive portal for embedded devices that allows users to connect to available Wi-Fi networks through a web interface.
-
-## Features
-
-- **Automatic Network Scanning**: Automatically scans and displays available Wi-Fi networks
-- **Signal Strength Indicators**: Visual signal strength bars for each network
-- **Secure Connection**: Supports both open and password-protected networks
-- **Responsive Design**: Modern dark theme UI that works on mobile and desktop
-- **Captive Portal Detection**: Handles captive portal detection from various devices
-- **Success Confirmation**: Redirects to success page after successful connection
-
-## Project Structure
-
+if [ -n "$WIFI_DEV" ] && [ "$WIFI_DEV" != "wlan0" ]; then
+    sudo ip link set dev "$WIFI_DEV" down
+    sudo ip link set dev "$WIFI_DEV" name wlan0
+    sudo ip link set dev wlan0 up
+fi
+```
+### 4. Service Configuration
+#### Create Setup Script
+```bash
+sudo cat > /usr/local/bin/setup-wlan0-static.sh << 'EOF'
+#!/bin/bash
+/sbin/ip link set dev wlan0 up
+/sbin/ip addr flush dev wlan0
+/sbin/ip addr add 192.168.4.1/24 dev wlan0
+if ip addr show wlan0 | grep -q "192.168.4.1/24"; then
+    exit 0
+else
+    exit 1
+fi
+EOF
+sudo chmod +x /usr/local/bin/setup-wlan0-static.sh
+```
+#### wlan0-static.service
+```bash
+sudo cat > /etc/systemd/system/wlan0-static.service << 'EOF'
+[Unit]
+Description=Set static IP for wlan0
+After=network.target
+Before=hostapd.service dnsmasq.service wifi-portal.service
+Wants=network.target
+[Service]
+Type=oneshot
+RemainAfterExit=no
+Restart=on-failure
+RestartSec=3
+TimeoutStartSec=300
+StartLimitIntervalSec=0
+StartLimitBurst=0
+ExecStartPre=/bin/bash -c 'if systemctl is-active --quiet NetworkManager; then nmcli dev set wlan0 managed no 2>/dev/null || true; fi'
+ExecStartPre=/bin/bash -c 'for i in {1..30}; do [ -e /sys/class/net/wlan0 ] && break; sleep 1; done'
+ExecStart=/usr/local/bin/setup-wlan0-static.sh
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+#### wifi-portal.service
+```bash
+sudo cat > /etc/systemd/system/wifi-portal.service << 'EOF'
+[Unit]
+Description=WiFi Captive Portal Backend
+After=network.target dnsmasq.service hostapd.service
+Wants=dnsmasq.service hostapd.service
+[Service]
+Type=simple
+WorkingDirectory=/userdata/wifi-captive-portal/backend
+ExecStart=/usr/bin/python3 /userdata/wifi-captive-portal/backend/app.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+User=root
+KillMode=process
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+#### Hostapd Service Override
+```bash
+sudo mkdir -p /etc/systemd/system/hostapd.service.d
+sudo cat > /etc/systemd/system/hostapd.service.d/override.conf << 'EOF'
+[Unit]
+Description=Override for hostapd - depend on wlan0-static
+Requires=wlan0-static.service
+After=wlan0-static.service
+StartLimitIntervalSec=180
+StartLimitBurst=10
+[Service]
+Type=forking
+ExecStartPre=/bin/bash -c 'for i in {1..15}; do ip link show wlan0 | grep -q "state UP" && break; sleep 2; done'
+ExecStartPre=/bin/sleep 5
+ExecStart=
+ExecStart=/usr/sbin/hostapd -B -P /run/hostapd.pid /etc/hostapd/hostapd.conf
+Restart=always
+RestartSec=3
+TimeoutStartSec=45
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+### 5. Configure Hostapd
+```bash
+sudo cat > /etc/hostapd/hostapd.conf << 'EOF'
+interface=wlan0
+driver=nl80211
+ssid=NIMBUS-Setup
+country_code=US
+hw_mode=g
+channel=6
+ieee80211n=1
+wmm_enabled=1
+auth_algs=1
+wpa=2
+wpa_key_mgmt=WPA-PSK
+rsn_pairwise=CCMP
+wpa_passphrase=botanika
+EOF
+sudo chmod 600 /etc/hostapd/hostapd.conf
+```
+### 6. Configure Dnsmasq
+```bash
+sudo cat > /etc/dnsmasq.conf << 'EOF'
+interface=wlan0
+dhcp-range=192.168.4.100,192.168.4.200,255.255.255.0,24h
+dhcp-option=3,192.168.4.1
+dhcp-option=6,192.168.4.1
+server=8.8.8.8
+server=114.114.114.114
+log-dhcp
+EOF
+```
+### 7. Enable and Start Services
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable wlan0-static hostapd dnsmasq wifi-portal
+sudo systemctl start wlan0-static
+sudo systemctl start hostapd
+sudo systemctl start dnsmasq
+sudo systemctl start wifi-portal
+```
+## Service Verification
+### Check Service Status
+```bash
+sudo systemctl status wlan0-static hostapd dnsmasq wifi-portal --no-pager
+```
+### Network Verification
+```bash
+ip -br addr show wlan0
+iw dev wlan0 info
+cat /var/lib/misc/dnsmasq.leases
+curl -I http://192.168.4.1/
+```
+## Troubleshooting
+### Service Diagnostics
+```bash
+sudo journalctl -u hostapd -f
+sudo journalctl -u wifi-portal -f
+sudo journalctl -u wlan0-static -f
+sudo journalctl -u wlan0-static -u hostapd -u dnsmasq -u wifi-portal --since "5 minutes ago" --no-pager
+```
+## Reset Script
+```bash
+sudo /userdata/wifi-captive-portal/reset-to-ap.sh
+```
+## File Structure
 ```
 wifi-captive-portal/
-├── app.py                 # Flask backend server
+├── backend/
+│   ├── app.py
+│   ├── requirements.txt
 ├── frontend/
-│   ├── index.html         # Main portal interface
-│   ├── success.html       # Success confirmation page
 │   └── public/
-│       └── logo.png       # Brand logo
-└── README.md
+│       ├── logo.png
+│       ├── index.html
+│       └── success.html
+├── reset-to-ap.sh
+└── readme.md
 ```
-
-## Requirements
-
-- Python 3.x
-- Flask
-- NetworkManager (nmcli)
-- systemd (for service management)
-
-## Installation
-
-1. **Clone or download the project files**
-
-   ```bash
-   cd /userdata/wifi-captive-portal
-   ```
-
-2. **Install Python dependencies**
-
-   ```bash
-   pip install flask
-   ```
-
-3. **Set up systemd service** (create `/etc/systemd/system/wifi-portal.service`)
-
-   ```ini
-   [Unit]
-   Description=Wi-Fi Captive Portal
-   After=network.target
-
-   [Service]
-   Type=simple
-   User=root
-   WorkingDirectory=/userdata/wifi-captive-portal
-   ExecStart=/usr/bin/python3 /userdata/wifi-captive-portal/app.py
-   Restart=always
-   RestartSec=5
-
-   [Install]
-   WantedBy=multi-user.target
-   ```
-
-4. **Enable and start the service**
-   ```bash
-   systemctl daemon-reload
-   systemctl enable wifi-portal
-   systemctl start wifi-portal
-   ```
-
-## Configuration
-
-### Network Interface
-
-By default, the portal uses `wlan0`. To change this, edit the `WIFI_IFACE` variable in `app.py`:
-
-```python
-WIFI_IFACE = "wlan0"
-```
-
-### Port
-
-The portal runs on port 80 by default. To change this, modify the `app.run()` call in `app.py`:
-
-```python
-app.run(host="0.0.0.0", port=80)
-```
-
-## Usage
-
-### Starting the Portal
-
-```bash
-systemctl start wifi-portal
-```
-
-### Stopping the Portal
-
-```bash
-systemctl stop wifi-portal
-```
-
-### Restarting the Portal
-
-```bash
-systemctl restart wifi-portal
-```
-
-### Checking Status
-
-```bash
-systemctl status wifi-portal
-```
-
-### Viewing Logs
-
-```bash
-journalctl -u wifi-portal -f
-```
-
-## API Endpoints
-
-- `GET /api/scan` - Scan for available Wi-Fi networks
-- `POST /api/connect` - Connect to a Wi-Fi network
-- `GET /api/status` - Check connection status
-- `GET /success.html` - Success confirmation page
-
-## Captive Portal Support
-
-The portal handles captive portal detection requests from:
-
-- iOS/macOS (`/generate_204`, `/hotspot-detect.html`)
-- Android (`/generate_204`)
-- Windows (`/ncsi.txt`, `/connecttest.txt`)
-- Various browsers and devices
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Portal not starting**
-
-   - Check if port 80 is available
-   - Verify Python and Flask are installed
-   - Check service logs: `journalctl -u wifi-portal`
-
-2. **No networks found**
-
-   - Ensure wireless interface is up: `ip link show wlan0`
-   - Check if NetworkManager is running: `systemctl status NetworkManager`
-
-3. **Connection failures**
-   - Verify SSID and password are correct
-   - Check if network is in range
-   - Look for error details in logs
-
-### Testing API Manually
-
-```bash
-# Test network scanning
-curl http://localhost/api/scan
-
-# Test connection
-curl -X POST http://localhost/api/connect \
-  -H "Content-Type: application/json" \
-  -d '{"ssid":"YOUR_SSID","password":"YOUR_PASSWORD"}'
-```
-
-## Customization
-
-### Changing Branding
-
-- Replace `frontend/public/logo.png` with your logo
-- Modify colors in CSS (look for `#f28c38` orange theme)
-
-### Modifying UI Text
-
-Edit text content in:
-
-- `frontend/index.html` - Main portal interface
-- `frontend/success.html` - Success page
-
-### Styling Changes
-
-CSS styles are embedded in each HTML file. Key color variables:
-
-- Primary orange: `#f28c38`
-- Background: `#181c20`
-- Card background: `#23272b`
-- Text: `#ffffff`
-- Muted text: `#a0a6b0`
-
-## Security Notes
-
-- The portal runs on the local network only
-- Passwords are transmitted over local network
-- Consider using HTTPS for production deployments
-- The service runs as root to manage network connections
-
 ## Support
-
-For issues and questions:
-
-1. Check service logs: `journalctl -u wifi-portal`
-2. Verify network interface configuration
-3. Test API endpoints manually
-4. Ensure all dependencies are installed
-
----
-
-**Note**: This captive portal is designed for local network use and should be properly secured for production environments.
+1. Check service status and logs
+2. Verify WiFi driver supports AP mode
+3. Ensure all dependencies are installed
+4. Check NetworkManager isn't interfering
+```
+```
