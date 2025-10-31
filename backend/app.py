@@ -108,6 +108,7 @@ def api_scan():
     except Exception as e:
         return jsonify({"ok": False, "error": "Scan failed"}), 500
 
+# Trong app.py, cập nhật hàm api_connect
 @app.post("/api/connect")
 def api_connect():
     data = request.get_json(silent=True) or {}
@@ -123,56 +124,62 @@ def api_connect():
     if not validate_password(pwd):
         return jsonify({"ok": False, "error": "Invalid password"}), 400
     
-    ssid_escaped = ssid.replace("'", "'\\''")
-    pwd_escaped = pwd.replace("'", "'\\''") if pwd else ""
-    
-    if pwd:
-        cmd = f"nmcli dev wifi connect '{ssid_escaped}' password '{pwd_escaped}' ifname {Config.WIFI_IFACE}"
-    else:
-        cmd = f"nmcli dev wifi connect '{ssid_escaped}' ifname {Config.WIFI_IFACE}"
-    
-    connection_success = False
-    connection_error = "Unable to join this network"
-    
-    for attempt in range(Config.MAX_CONNECTION_ATTEMPTS):
-        code, out, err = run_command(cmd, timeout=Config.CONNECTION_TIMEOUT)
-        
-        if code == 0:
-            connection_success = True
-            break
-        
-        error_output = (out + " " + err).lower()
-        if any(keyword in error_output for keyword in ["secrets", "password", "802.11", "auth"]):
-            connection_error = "Incorrect password"
-            break
-        elif "no network" in error_output or "not found" in error_output:
-            connection_error = "Network not available"
-            break
-        
-        if attempt < Config.MAX_CONNECTION_ATTEMPTS - 1:
-            time.sleep(2)
+    # Thử kết nối client (STA mode) đồng thời với AP
+    connection_success = virtual_ap.start_client_connection(ssid, pwd)
     
     if connection_success:
-        # KHÔNG restore AP mode - giữ nguyên kết nối client, virtual AP vẫn chạy
+        # Kiểm tra AP mode vẫn hoạt động
+        ap_still_active = virtual_ap.check_ap_status()
+        
         return jsonify({
             "ok": True, 
-            "message": "Connected successfully. Captive portal remains available."
+            "message": "Connected successfully" + (" (AP mode remains active)" if ap_still_active else ""),
+            "ap_active": ap_still_active
         }), 200
     else:
-        # Chỉ restore AP khi kết nối thất bại
-        restore_success = restore_ap_mode()
+        # Khôi phục AP mode nếu cần
+        restore_success = virtual_ap.restore_ap_mode()
         
+        error_msg = "Unable to join this network"
         if restore_success:
-            connection_error += ". AP mode has been restored."
+            error_msg += ". AP mode has been restored."
         else:
-            connection_error += ". AP mode restoration may be needed."
+            error_msg += ". AP mode restoration may be needed."
             
         return jsonify({
             "ok": False, 
-            "error": connection_error,
+            "error": error_msg,
             "ap_restored": restore_success
         }), 400
 
+# Thêm API để kiểm tra concurrent status
+@app.get("/api/concurrent-status")
+def api_concurrent_status():
+    """Kiểm tra trạng thái concurrent AP+STA"""
+    try:
+        # Kiểm tra AP mode
+        code_ap, out_ap, err_ap = run_command(f"iw dev {Config.WIFI_IFACE} info")
+        ap_active = code_ap == 0 and "type AP" in out_ap
+        
+        # Kiểm tra STA connections
+        code_sta, out_sta, err_sta = run_command("nmcli -t con show --active")
+        sta_active = code_sta == 0 and len(out_sta.strip()) > 0
+        
+        # Kiểm tra hostapd
+        code_hapd, out_hapd, err_hapd = run_command("pgrep hostapd")
+        hostapd_running = code_hapd == 0
+        
+        return jsonify({
+            "ok": True,
+            "ap_active": ap_active,
+            "sta_active": sta_active,
+            "hostapd_running": hostapd_running,
+            "concurrent_mode": ap_active and sta_active,
+            "interface": Config.WIFI_IFACE
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+        
 @app.get("/api/status")
 def api_status():
     try:
