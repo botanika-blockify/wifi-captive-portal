@@ -1,7 +1,6 @@
 #!/bin/bash
 # Full Auto-Setup Script for WiFi Captive Portal
 # Run: sudo ./install-captive-portal.sh
-# Automatically clones, sets up venv, installs Flask, configures AP
 
 set -e
 
@@ -22,11 +21,11 @@ sudo apt install -y hostapd dnsmasq python3-pip python3-venv net-tools iw
 # === 3. Setup Virtual Environment + Install Flask ===
 echo "Setting up Python virtual environment and installing Flask..."
 sudo mkdir -p /userdata/wifi-captive-portal/venv
-python3 -m venv /userdata/wifi-captive-portal/venv
-/userdata/wifi-captive-portal/venv/bin/pip install --upgrade pip > /dev/null 2>&1
-/userdate/wifi-captive-portal/venv/bin/pip install Flask > /dev/null 2>&1
+sudo python3 -m venv /userdata/wifi-captive-portal/venv
+sudo /userdata/wifi-captive-portal/venv/bin/pip install --upgrade pip > /dev/null 2>&1
+sudo /userdata/wifi-captive-portal/venv/bin/pip install Flask > /dev/null 2>&1
 
-# === 4. Force WiFi Interface to wlan0 (nl80211 + AP support) ===
+# === 4. Force WiFi Interface to wlan0 ===
 echo "Detecting and renaming WiFi interface to wlan0..."
 WIFI_DEV=$(iw dev | awk '/Interface/ {print $2}' | while read dev; do \
     if iw list | grep -A 20 "Interface $dev" | grep -q "nl80211" && \
