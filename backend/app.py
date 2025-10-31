@@ -1,5 +1,6 @@
 import os, subprocess, shlex
 import time
+import tempfile
 from flask import Flask, request, jsonify, send_from_directory, redirect, Response
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -9,9 +10,9 @@ WIFI_IFACE = "wlan0"
 app = Flask(__name__, static_folder=None)
 
 class Config:
-    MAX_CONNECTION_ATTEMPTS = 1
-    CONNECTION_TIMEOUT = 30
-    SCAN_TIMEOUT = 10
+    MAX_CONNECTION_ATTEMPTS = 3
+    CONNECTION_TIMEOUT = 45
+    SCAN_TIMEOUT = 15
 
 def run(cmd: str, timeout=30):
     try:
@@ -27,35 +28,11 @@ def run(cmd: str, timeout=30):
     except Exception as e:
         return -1, "", str(e)
 
-def restore_ap_mode():
-    try:
-        run("pkill wpa_supplicant", timeout=5)
-        run("pkill dhclient", timeout=5)
-        
-        run(f"ip link set {WIFI_IFACE} down", timeout=5)
-        time.sleep(2)
-        
-        run(f"iwconfig {WIFI_IFACE} mode master", timeout=5)
-        
-        run(f"ip link set {WIFI_IFACE} up", timeout=5)
-        time.sleep(2)
-        
-        run(f"ifconfig {WIFI_IFACE} 192.168.4.1 netmask 255.255.255.0 up", timeout=5)
-        
-        run("systemctl restart hostapd", timeout=10)
-        
-        run("systemctl restart dnsmasq", timeout=10)
-        
-        return True
-        
-    except Exception as e:
-        return False
-
 def validate_ssid(ssid):
     if not ssid or len(ssid) > 32:
         return False
     import re
-    if not re.match(r'^[a-zA-Z0-9_\-\.\s]+$', ssid):
+    if not re.match(r'^[a-zA-Z0-9_\-\.\s\u0080-\uFFFF]+$', ssid):
         return False
     return True
 
@@ -63,6 +40,22 @@ def validate_password(password):
     if password and len(password) > 64:
         return False
     return True
+
+def get_wifi_security_type(ssid):
+    """Xác định loại bảo mật của mạng WiFi"""
+    try:
+        code, out, err = run("nmcli -t -f SSID,SECURITY dev wifi list", timeout=10)
+        if code == 0 and out:
+            for line in out.splitlines():
+                parts = line.split(":")
+                if len(parts) >= 2:
+                    current_ssid = ":".join(parts[:-1])
+                    security = parts[-1]
+                    if current_ssid == ssid:
+                        return security
+        return "unknown"
+    except Exception as e:
+        return "unknown"
 
 @app.get("/api/scan")
 def api_scan():
@@ -105,16 +98,18 @@ def api_connect():
     if not validate_password(pwd):
         return jsonify({"ok": False, "error": "Invalid password"}), 400
     
-    ssid_escaped = ssid.replace("'", "'\\''")
-    pwd_escaped = pwd.replace("'", "'\\''") if pwd else ""
-    
-    if pwd:
-        cmd = f"nmcli dev wifi connect '{ssid_escaped}' password '{pwd_escaped}' ifname {WIFI_IFACE}"
-    else:
-        cmd = f"nmcli dev wifi connect '{ssid_escaped}' ifname {WIFI_IFACE}"
-    
     connection_success = False
     connection_error = "Unable to join this network"
+    detailed_error = ""
+    
+    # Phương thức 1: Sử dụng nmcli với escaping an toàn
+    ssid_escaped = shlex.quote(ssid)
+    pwd_escaped = shlex.quote(pwd) if pwd else ""
+    
+    if pwd:
+        cmd = f"nmcli --wait 30 dev wifi connect {ssid_escaped} password {pwd_escaped} ifname {WIFI_IFACE}"
+    else:
+        cmd = f"nmcli --wait 30 dev wifi connect {ssid_escaped} ifname {WIFI_IFACE}"
     
     for attempt in range(Config.MAX_CONNECTION_ATTEMPTS):
         code, out, err = run(cmd, timeout=Config.CONNECTION_TIMEOUT)
@@ -124,15 +119,69 @@ def api_connect():
             break
         
         error_output = (out + " " + err).lower()
-        if any(keyword in error_output for keyword in ["secrets", "password", "802.11", "auth"]):
+        detailed_error = f"Output: {out}, Error: {err}"
+        
+        if any(keyword in error_output for keyword in ["secrets", "password", "802.11", "auth", "wpa"]):
             connection_error = "Incorrect password"
             break
         elif "no network" in error_output or "not found" in error_output:
             connection_error = "Network not available"
             break
+        elif "timeout" in error_output:
+            connection_error = "Connection timeout - network may be too far or busy"
+        elif "device is busy" in error_output:
+            connection_error = "WiFi device is busy, please try again"
+            time.sleep(3)
+        elif "no secrets" in error_output:
+            connection_error = "Password required for this network"
+            break
         
         if attempt < Config.MAX_CONNECTION_ATTEMPTS - 1:
             time.sleep(2)
+    
+    # Phương thức 2: Fallback sử dụng wpa_supplicant nếu nmcli thất bại
+    if not connection_success and pwd:
+        try:
+            # Tạo file cấu hình tạm thời
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False) as f:
+                f.write(f'''network={{
+    ssid="{ssid}"
+    scan_ssid=1
+    key_mgmt=WPA-PSK
+    psk="{pwd}"
+}}''')
+                temp_config = f.name
+            
+            # Dừng các kết nối hiện tại
+            run("sudo pkill wpa_supplicant", timeout=5)
+            time.sleep(2)
+            
+            # Khởi động wpa_supplicant
+            cmd = f"sudo wpa_supplicant -B -i {WIFI_IFACE} -c {temp_config}"
+            code, out, err = run(cmd, timeout=10)
+            
+            if code == 0:
+                # Chờ kết nối
+                time.sleep(5)
+                
+                # Lấy IP address
+                run(f"sudo dhclient -v {WIFI_IFACE}", timeout=15)
+                
+                # Kiểm tra kết nối
+                code_check, out_check, _ = run(f"iwconfig {WIFI_IFACE}", timeout=5)
+                if f'ESSID:"{ssid}"' in out_check:
+                    connection_success = True
+                    connection_error = ""
+                else:
+                    connection_error = "Connected but SSID mismatch"
+            
+            # Dọn dẹp file tạm
+            if os.path.exists(temp_config):
+                os.unlink(temp_config)
+                
+        except Exception as e:
+            if not connection_error:
+                connection_error = f"Fallback also failed: {str(e)}"
     
     if connection_success:
         return jsonify({
@@ -140,17 +189,10 @@ def api_connect():
             "message": "Connected successfully"
         }), 200
     else:
-        restore_success = restore_ap_mode()
-        
-        if restore_success:
-            connection_error += ". AP mode has been restored."
-        else:
-            connection_error += ". AP mode restoration may be needed."
-            
         return jsonify({
             "ok": False, 
             "error": connection_error,
-            "ap_restored": restore_success
+            "details": detailed_error
         }), 400
 
 @app.get("/api/status")
@@ -161,13 +203,17 @@ def api_status():
         code_ping, _, _ = run("ping -c1 -w2 8.8.8.8")
         code_conn, out_conn, _ = run("nmcli -t connection show --active")
         
+        # Lấy thông tin kết nối WiFi hiện tại
+        code_wifi, out_wifi, _ = run(f"iwconfig {WIFI_IFACE}")
+        
         return jsonify({
             "ok": True, 
             "iface": WIFI_IFACE,
             "ip": out_ip,
             "default_route": out_rt,
             "internet": code_ping == 0,
-            "active_connections": out_conn
+            "active_connections": out_conn,
+            "wifi_connection": out_wifi
         })
     
     except Exception as e:
@@ -182,13 +228,55 @@ def api_health():
         "version": "1.0.0"
     })
 
-@app.get("/api/restore-ap")
-def api_restore_ap():
-    success = restore_ap_mode()
-    if success:
-        return jsonify({"ok": True, "message": "AP mode restored successfully"})
-    else:
-        return jsonify({"ok": False, "error": "Failed to restore AP mode"}), 500
+@app.post("/api/debug-connect")
+def api_debug_connect():
+    """Endpoint debug để xem chi tiết kết nối"""
+    data = request.get_json(silent=True) or {}
+    ssid = data.get("ssid", "").strip()
+    
+    # Lấy thông tin chi tiết về mạng
+    cmd_scan = f"nmcli -f SSID,BSSID,MODE,CHAN,FREQ,RATE,SIGNAL,SECURITY dev wifi list"
+    code_scan, out_scan, err_scan = run(cmd_scan, timeout=10)
+    
+    # Lấy thông tin interface
+    cmd_iface = f"ip addr show {WIFI_IFACE}"
+    code_iface, out_iface, err_iface = run(cmd_iface)
+    
+    # Lấy thông tin kết nối hiện tại
+    cmd_conn = "nmcli -t connection show --active"
+    code_conn, out_conn, err_conn = run(cmd_conn)
+    
+    debug_info = {
+        "ssid_requested": ssid,
+        "available_networks": out_scan,
+        "interface_status": out_iface,
+        "current_connections": out_conn,
+        "scan_error": err_scan,
+        "iface_error": err_iface
+    }
+    
+    return jsonify(debug_info)
+
+@app.get("/api/forget-all")
+def api_forget_all():
+    """Quên tất cả kết nối WiFi cũ"""
+    try:
+        code, out, err = run("nmcli -t -f NAME,UUID connection show")
+        if code == 0:
+            for line in out.splitlines():
+                if "wifi" in line.lower():
+                    parts = line.split(":")
+                    if len(parts) >= 2:
+                        conn_name = parts[0]
+                        run(f"nmcli connection delete '{conn_name}'")
+        
+        # Khởi động lại NetworkManager
+        run("sudo systemctl restart NetworkManager", timeout=10)
+        time.sleep(3)
+        
+        return jsonify({"ok": True, "message": "Forgot all WiFi connections"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 @app.get("/generate_204")
 def generate_204():
