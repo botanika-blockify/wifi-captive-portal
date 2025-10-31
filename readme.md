@@ -208,6 +208,7 @@ wifi-captive-portal/
 │       ├── index.html
 │       └── success.html
 ├── reset-to-ap.sh
+├── install-captive-portal.sh
 └── readme.md
 ```
 ## Support
