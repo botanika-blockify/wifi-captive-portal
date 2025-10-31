@@ -1,73 +1,91 @@
-import os, subprocess, shlex
+# /userdata/wifi-captive-portal/backend/app.py
+import os
 import time
+import atexit
+import signal
+import sys
 from flask import Flask, request, jsonify, send_from_directory, redirect, Response
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-FRONTEND_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "frontend"))
-WIFI_IFACE = "wlan0"
+from config import Config
+from utils import run_command, validate_ssid, validate_password
+from virtual_ap_manager import VirtualAPManager
 
 app = Flask(__name__, static_folder=None)
 
-class Config:
-    MAX_CONNECTION_ATTEMPTS = 1
-    CONNECTION_TIMEOUT = 30
-    SCAN_TIMEOUT = 10
+# Khởi tạo Virtual AP Manager
+virtual_ap = VirtualAPManager()
 
-def run(cmd: str, timeout=30):
+def initialize_virtual_ap():
+    """Khởi tạo Virtual AP khi ứng dụng start"""
     try:
-        p = subprocess.Popen(shlex.split(cmd), 
-                           stdout=subprocess.PIPE, 
-                           stderr=subprocess.PIPE, 
-                           text=True)
-        out, err = p.communicate(timeout=timeout)
-        return p.returncode, out.strip(), err.strip()
-    except subprocess.TimeoutExpired:
-        p.kill()
-        return -1, "", "Command timed out"
+        app.logger.info("Initializing Virtual AP...")
+        
+        # Chờ một chút để hệ thống network sẵn sàng
+        time.sleep(3)
+        
+        success = virtual_ap.start_virtual_ap()
+        if success:
+            app.logger.info("Virtual AP started successfully")
+        else:
+            app.logger.error("Failed to start Virtual AP")
+            
+        return success
+        
     except Exception as e:
-        return -1, "", str(e)
+        app.logger.error(f"Error initializing Virtual AP: {e}")
+        return False
+
+def cleanup_virtual_ap():
+    """Dọn dẹp khi ứng dụng dừng"""
+    try:
+        app.logger.info("Cleaning up Virtual AP...")
+        virtual_ap.stop_virtual_ap()
+        app.logger.info("Virtual AP cleaned up successfully")
+    except Exception as e:
+        app.logger.error(f"Error cleaning up Virtual AP: {e}")
+
+def signal_handler(signum, frame):
+    """Xử lý signal để dọn dẹp đúng cách"""
+    app.logger.info(f"Received signal {signum}, cleaning up...")
+    cleanup_virtual_ap()
+    sys.exit(0)
+
+# Đăng ký signal handlers
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
+
+# Đăng ký cleanup function
+atexit.register(cleanup_virtual_ap)
+
+# Khởi tạo Virtual AP khi import
+app.before_first_request(initialize_virtual_ap)
 
 def restore_ap_mode():
+    """Khôi phục AP mode trên virtual interface"""
     try:
-        run("pkill wpa_supplicant", timeout=5)
-        run("pkill dhclient", timeout=5)
+        # Dừng kết nối client nếu có
+        run_command("nmcli con down $(nmcli -t -f NAME con show --active | head -1)", timeout=10)
+        time.sleep(3)
         
-        run(f"ip link set {WIFI_IFACE} down", timeout=5)
-        time.sleep(2)
+        # Khởi động lại virtual AP
+        success = virtual_ap.start_virtual_ap()
         
-        run(f"iwconfig {WIFI_IFACE} mode master", timeout=5)
-        
-        run(f"ip link set {WIFI_IFACE} up", timeout=5)
-        time.sleep(2)
-        
-        run(f"ifconfig {WIFI_IFACE} 192.168.4.1 netmask 255.255.255.0 up", timeout=5)
-        
-        run("systemctl restart hostapd", timeout=10)
-        
-        run("systemctl restart dnsmasq", timeout=10)
-        
-        return True
+        if success:
+            app.logger.info("AP mode restored on virtual interface")
+        else:
+            app.logger.error("Failed to restore AP mode")
+            
+        return success
         
     except Exception as e:
+        app.logger.error(f"Error in restore_ap_mode: {e}")
         return False
 
-def validate_ssid(ssid):
-    if not ssid or len(ssid) > 32:
-        return False
-    import re
-    if not re.match(r'^[a-zA-Z0-9_\-\.\s]+$', ssid):
-        return False
-    return True
-
-def validate_password(password):
-    if password and len(password) > 64:
-        return False
-    return True
-
+# Các API endpoints giữ nguyên...
 @app.get("/api/scan")
 def api_scan():
     try:
-        code, out, err = run("nmcli -t -f SSID,SIGNAL,SECURITY dev wifi list", 
+        code, out, err = run_command("nmcli -t -f SSID,SIGNAL,SECURITY dev wifi list", 
                            timeout=Config.SCAN_TIMEOUT)
         networks = []
         if code == 0 and out:
@@ -109,15 +127,15 @@ def api_connect():
     pwd_escaped = pwd.replace("'", "'\\''") if pwd else ""
     
     if pwd:
-        cmd = f"nmcli dev wifi connect '{ssid_escaped}' password '{pwd_escaped}' ifname {WIFI_IFACE}"
+        cmd = f"nmcli dev wifi connect '{ssid_escaped}' password '{pwd_escaped}' ifname {Config.WIFI_IFACE}"
     else:
-        cmd = f"nmcli dev wifi connect '{ssid_escaped}' ifname {WIFI_IFACE}"
+        cmd = f"nmcli dev wifi connect '{ssid_escaped}' ifname {Config.WIFI_IFACE}"
     
     connection_success = False
     connection_error = "Unable to join this network"
     
     for attempt in range(Config.MAX_CONNECTION_ATTEMPTS):
-        code, out, err = run(cmd, timeout=Config.CONNECTION_TIMEOUT)
+        code, out, err = run_command(cmd, timeout=Config.CONNECTION_TIMEOUT)
         
         if code == 0:
             connection_success = True
@@ -135,11 +153,13 @@ def api_connect():
             time.sleep(2)
     
     if connection_success:
+        # KHÔNG restore AP mode - giữ nguyên kết nối client, virtual AP vẫn chạy
         return jsonify({
             "ok": True, 
-            "message": "Connected successfully"
+            "message": "Connected successfully. Captive portal remains available."
         }), 200
     else:
+        # Chỉ restore AP khi kết nối thất bại
         restore_success = restore_ap_mode()
         
         if restore_success:
@@ -156,14 +176,14 @@ def api_connect():
 @app.get("/api/status")
 def api_status():
     try:
-        code_ip, out_ip, _ = run(f"ip -br addr show dev {WIFI_IFACE}")
-        code_rt, out_rt, _ = run("ip route show default")
-        code_ping, _, _ = run("ping -c1 -w2 8.8.8.8")
-        code_conn, out_conn, _ = run("nmcli -t connection show --active")
+        code_ip, out_ip, _ = run_command(f"ip -br addr show dev {Config.WIFI_IFACE}")
+        code_rt, out_rt, _ = run_command("ip route show default")
+        code_ping, _, _ = run_command("ping -c1 -w2 8.8.8.8")
+        code_conn, out_conn, _ = run_command("nmcli -t connection show --active")
         
         return jsonify({
             "ok": True, 
-            "iface": WIFI_IFACE,
+            "iface": Config.WIFI_IFACE,
             "ip": out_ip,
             "default_route": out_rt,
             "internet": code_ping == 0,
@@ -190,6 +210,27 @@ def api_restore_ap():
     else:
         return jsonify({"ok": False, "error": "Failed to restore AP mode"}), 500
 
+@app.get("/api/virtual-ap-status")
+def api_virtual_ap_status():
+    """API kiểm tra trạng thái Virtual AP"""
+    try:
+        code, out, err = run_command(f"ip link show {Config.VIRTUAL_IFACE}")
+        virtual_iface_exists = code == 0
+        
+        code, out, err = run_command("pgrep hostapd")
+        hostapd_running = code == 0
+        
+        return jsonify({
+            "ok": True,
+            "virtual_interface": virtual_iface_exists,
+            "hostapd_running": hostapd_running,
+            "virtual_iface": Config.VIRTUAL_IFACE,
+            "physical_iface": Config.WIFI_IFACE
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+# Các captive portal endpoints giữ nguyên...
 @app.get("/generate_204")
 def generate_204():
     return "", 204
@@ -264,21 +305,29 @@ def canonical_html():
 
 @app.get("/")
 def serve_index():
-    return send_from_directory(FRONTEND_DIR, "index.html")
+    return send_from_directory(Config.FRONTEND_DIR, "index.html")
 
 @app.route("/success.html")
 def serve_success():
-    return send_from_directory(FRONTEND_DIR, "success.html")
+    return send_from_directory(Config.FRONTEND_DIR, "success.html")
 
 @app.route("/public/<path:filename>")
 def serve_static(filename):
-    return send_from_directory(os.path.join(FRONTEND_DIR, "public"), filename)
+    return send_from_directory(os.path.join(Config.FRONTEND_DIR, "public"), filename)
 
 @app.route("/<path:path>")
 def serve_frontend(path):
-    if os.path.exists(os.path.join(FRONTEND_DIR, path)):
-        return send_from_directory(FRONTEND_DIR, path)
-    return send_from_directory(FRONTEND_DIR, "index.html")
+    if os.path.exists(os.path.join(Config.FRONTEND_DIR, path)):
+        return send_from_directory(Config.FRONTEND_DIR, path)
+    return send_from_directory(Config.FRONTEND_DIR, "index.html")
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=80, debug=False)
+    # Khởi tạo Virtual AP ngay khi chạy ứng dụng
+    init_success = initialize_virtual_ap()
+    
+    if init_success:
+        print("Virtual AP initialized successfully, starting Flask app...")
+        app.run(host="0.0.0.0", port=80, debug=False)
+    else:
+        print("Failed to initialize Virtual AP, exiting...")
+        sys.exit(1)
