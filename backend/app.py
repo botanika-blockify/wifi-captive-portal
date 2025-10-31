@@ -102,7 +102,6 @@ def api_connect():
     connection_error = "Unable to join this network"
     detailed_error = ""
     
-    # Phương thức 1: Sử dụng nmcli với escaping an toàn
     ssid_escaped = shlex.quote(ssid)
     pwd_escaped = shlex.quote(pwd) if pwd else ""
     
@@ -139,10 +138,8 @@ def api_connect():
         if attempt < Config.MAX_CONNECTION_ATTEMPTS - 1:
             time.sleep(2)
     
-    # Phương thức 2: Fallback sử dụng wpa_supplicant nếu nmcli thất bại
     if not connection_success and pwd:
         try:
-            # Tạo file cấu hình tạm thời
             with tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False) as f:
                 f.write(f'''network={{
     ssid="{ssid}"
@@ -152,22 +149,17 @@ def api_connect():
 }}''')
                 temp_config = f.name
             
-            # Dừng các kết nối hiện tại
             run("sudo pkill wpa_supplicant", timeout=5)
             time.sleep(2)
             
-            # Khởi động wpa_supplicant
             cmd = f"sudo wpa_supplicant -B -i {WIFI_IFACE} -c {temp_config}"
             code, out, err = run(cmd, timeout=10)
             
             if code == 0:
-                # Chờ kết nối
                 time.sleep(5)
                 
-                # Lấy IP address
                 run(f"sudo dhclient -v {WIFI_IFACE}", timeout=15)
                 
-                # Kiểm tra kết nối
                 code_check, out_check, _ = run(f"iwconfig {WIFI_IFACE}", timeout=5)
                 if f'ESSID:"{ssid}"' in out_check:
                     connection_success = True
@@ -175,7 +167,6 @@ def api_connect():
                 else:
                     connection_error = "Connected but SSID mismatch"
             
-            # Dọn dẹp file tạm
             if os.path.exists(temp_config):
                 os.unlink(temp_config)
                 
@@ -203,7 +194,6 @@ def api_status():
         code_ping, _, _ = run("ping -c1 -w2 8.8.8.8")
         code_conn, out_conn, _ = run("nmcli -t connection show --active")
         
-        # Lấy thông tin kết nối WiFi hiện tại
         code_wifi, out_wifi, _ = run(f"iwconfig {WIFI_IFACE}")
         
         return jsonify({
@@ -230,19 +220,15 @@ def api_health():
 
 @app.post("/api/debug-connect")
 def api_debug_connect():
-    """Endpoint debug để xem chi tiết kết nối"""
     data = request.get_json(silent=True) or {}
     ssid = data.get("ssid", "").strip()
     
-    # Lấy thông tin chi tiết về mạng
     cmd_scan = f"nmcli -f SSID,BSSID,MODE,CHAN,FREQ,RATE,SIGNAL,SECURITY dev wifi list"
     code_scan, out_scan, err_scan = run(cmd_scan, timeout=10)
     
-    # Lấy thông tin interface
     cmd_iface = f"ip addr show {WIFI_IFACE}"
     code_iface, out_iface, err_iface = run(cmd_iface)
     
-    # Lấy thông tin kết nối hiện tại
     cmd_conn = "nmcli -t connection show --active"
     code_conn, out_conn, err_conn = run(cmd_conn)
     
