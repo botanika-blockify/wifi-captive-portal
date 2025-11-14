@@ -619,11 +619,7 @@
           let data = await res.json()
 
           if (res.status === 200 && data.ok) {
-            const successEl = document.getElementById('success')
-            successEl.innerHTML = '<span class="message-icon">✅</span> Connected successfully! You can now close this page.'
-            successEl.className = 'ok'
-            successEl.style.animation = 'fadeIn 0.5s forwards'
-            resultEl.innerText = ''
+            window.location.href = '/success.html'
           } else {
             const errorEl = document.getElementById('error')
             const errorMsg = data.error || 'Unable to join this network. Please try again.'
