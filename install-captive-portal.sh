@@ -134,7 +134,7 @@ EOF
 # === 9. Configure Hostapd ===
 echo "Writing hostapd.conf..."
 sudo tee /etc/hostapd/hostapd.conf > /dev/null << 'EOF'
-interface=wlan0
+interface=wlP2p33s0
 driver=nl80211
 ssid=NIMBUS-Setup
 country_code=US
@@ -153,7 +153,7 @@ sudo chmod 600 /etc/hostapd/hostapd.conf
 # === 10. Configure Dnsmasq ===
 echo "Writing dnsmasq.conf..."
 sudo tee /etc/dnsmasq.conf > /dev/null << 'EOF'
-interface=wlan0
+interface=wlP2p33s0
 dhcp-range=192.168.4.100,192.168.4.200,255.255.255.0,24h
 dhcp-option=3,192.168.4.1
 dhcp-option=6,192.168.4.1
@@ -177,5 +177,5 @@ echo "Services status:"
 sudo systemctl status wlan0-static hostapd dnsmasq wifi-portal --no-pager | cat
 
 echo ""
-echo "Connect to WiFi: NIMBUS-Setup | Pass: botanika"
+echo "Connect to WiFi: NIMBUS-Setup"
 echo "Open browser to http://192.168.4.1"

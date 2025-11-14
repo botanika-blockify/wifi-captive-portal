@@ -5,8 +5,8 @@ from flask import Flask, request, jsonify, send_from_directory, redirect, Respon
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "frontend"))
-AP_IFACE = "wlan0"      
-CLIENT_IFACE = "wlP2p33s0" 
+AP_IFACE = "wlP2p33s0"      
+CLIENT_IFACE = "wlan0" 
 WIFI_IFACE = CLIENT_IFACE  
 
 app = Flask(__name__, static_folder=None)
@@ -17,6 +17,7 @@ class Config:
     SCAN_TIMEOUT = 15
 
 def run(cmd: str, timeout=30):
+    p = None
     try:
         p = subprocess.Popen(shlex.split(cmd), 
                            stdout=subprocess.PIPE, 
@@ -25,7 +26,8 @@ def run(cmd: str, timeout=30):
         out, err = p.communicate(timeout=timeout)
         return p.returncode, out.strip(), err.strip()
     except subprocess.TimeoutExpired:
-        p.kill()
+        if p:
+            p.kill()
         return -1, "", "Command timed out"
     except Exception as e:
         return -1, "", str(e)
