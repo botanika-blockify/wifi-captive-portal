@@ -492,4 +492,4 @@ def serve_frontend(path):
     return send_from_directory(FRONTEND_DIR, "index.html")
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=80, debug=False)
+    app.run(host="192.168.4.1", port=80, threaded=True)
