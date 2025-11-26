@@ -5,7 +5,7 @@ from flask import Flask, request, jsonify, send_from_directory, redirect, Respon
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "frontend"))
-AP_IFACE = "wlP2p33s0"      
+AP_IFACE = "wlan0"      
 CLIENT_IFACE = "wlan0" 
 WIFI_IFACE = CLIENT_IFACE  
 

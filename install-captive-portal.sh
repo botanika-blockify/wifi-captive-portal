@@ -134,7 +134,7 @@ EOF
 # === 9. Configure Hostapd ===
 echo "Writing hostapd.conf..."
 sudo tee /etc/hostapd/hostapd.conf > /dev/null << 'EOF'
-interface=wlP2p33s0
+interface=wlan0
 driver=nl80211
 ssid=NIMBUS-Setup
 country_code=US
@@ -153,7 +153,7 @@ sudo chmod 600 /etc/hostapd/hostapd.conf
 # === 10. Configure Dnsmasq ===
 echo "Writing dnsmasq.conf..."
 sudo tee /etc/dnsmasq.conf > /dev/null << 'EOF'
-interface=wlP2p33s0
+interface=wlan0
 dhcp-range=192.168.4.100,192.168.4.200,255.255.255.0,24h
 dhcp-option=3,192.168.4.1
 dhcp-option=6,192.168.4.1
