@@ -436,7 +436,6 @@ def redirect_captive():
 def captiveportal():
     if is_client_connected():
         return "", 204
-
     else:
         return redirect("/", code=302)
 
@@ -475,8 +474,10 @@ def canonical_html():
 
 @app.get("/")
 def serve_index():
-    return send_from_directory(FRONTEND_DIR, "index.html")
-
+    return Response(
+        open(os.path.join(FRONTEND_DIR, "index.html")).read(),
+        mimetype="text/html"
+    )
 @app.route("/success.html")
 def serve_success():
     return send_from_directory(FRONTEND_DIR, "success.html")
