@@ -369,17 +369,11 @@ def api_forget_all():
 
 @app.get("/generate_204")
 def generate_204():
-    if is_client_connected():
-        return "", 204
-    else:
-        return redirect("/", code=302)
+    return redirect("/", code=302)
 
 @app.get("/gen_204")
 def gen_204():
-    if is_client_connected():
-        return "", 204
-    else:
-        return redirect("/", code=302)
+    return redirect("/", code=302)
 
 @app.get("/library/test/success.html")
 def library_test_success():
@@ -387,90 +381,63 @@ def library_test_success():
 
 @app.get("/hotspot-detect.html")
 def hotspot_detect_html():
-    if is_client_connected():
-        return "", 204
-    else:
-        html_content = """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta http-equiv="refresh" content="0;url=/">
-            <title>Network Authentication Required</title>
-        </head>
-        <body>
-            <p>Redirecting to authentication page...</p>
-        </body>
-        </html>
-        """
-        return Response(html_content, mimetype='text/html')
+    html_content = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta http-equiv="refresh" content="0;url=/">
+        <title>Network Authentication Required</title>
+    </head>
+    <body>
+        <p>Redirecting to authentication page...</p>
+    </body>
+    </html>
+    """
+    return Response(html_content, mimetype='text/html')
 
 @app.get("/hotspot-detect")
 def hotspot_detect():
-    if is_client_connected():
-        return "", 204
-    else:
-        return redirect("/", code=302)
+    return redirect("/", code=302)
 
 @app.get("/ncsi.txt")
 def ncsi_txt():
-    if is_client_connected():
-        return Response("Microsoft NCSI", mimetype='text/plain')
-    else:
-        return redirect("/", code=302)
+    return redirect("/", code=302)
 
 @app.get("/connecttest.txt")
 def connecttest_txt():
-    if is_client_connected():
-        return Response("success", mimetype='text/plain')
-    else:
-        return redirect("/", code=302)
+    return redirect("/", code=302)
 
 @app.get("/redirect")
 def redirect_captive():
-    if is_client_connected():
-        return "", 204
-    else:
-        return redirect("/", code=302)
+    return redirect("/", code=302)
 
 @app.get("/captiveportal")
 def captiveportal():
-    if is_client_connected():
-        return "", 204
-    else:
-        return redirect("/", code=302)
+    return redirect("/", code=302)
 
 @app.get("/fs/captiveportal")
 def fs_captiveportal():
-    if is_client_connected():
-        return "", 204
-    else:
-        return redirect("/", code=302)
+    return redirect("/", code=302)
 
 @app.get("/success.txt")
 def success_txt():
-    if is_client_connected():
-        return Response("success", mimetype='text/plain')
-    else:
-        return redirect("/", code=302)
+    return redirect("/", code=302)
 
 @app.get("/canonical.html")
 def canonical_html():
-    if is_client_connected():
-        return "", 204
-    else:
-        html_content = """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta http-equiv="refresh" content="0;url=/">
-            <title>Redirecting</title>
-        </head>
-        <body>
-            <p>Redirecting to authentication page...</p>
-        </body>
-        </html>
-        """
-        return Response(html_content, mimetype='text/html')
+    html_content = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta http-equiv="refresh" content="0;url=/">
+        <title>Redirecting</title>
+    </head>
+    <body>
+        <p>Redirecting to authentication page...</p>
+    </body>
+    </html>
+    """
+    return Response(html_content, mimetype='text/html')
 
 @app.get("/")
 def serve_index():
