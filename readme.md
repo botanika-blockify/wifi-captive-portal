@@ -27,127 +27,115 @@ sudo apt update
 sudo apt install hostapd dnsmasq python3-pip net-tools iw
 pip3 install -r backend/requirements.txt
 ```
-### 3. WiFi Driver Setup
-#### Check Your WiFi Hardware
-```bash
-iw dev
-cat /sys/class/net/$(iw dev | grep Interface | cut -d' ' -f2)/device/uevent | grep DRIVER
-iw list | grep -A 10 "Supported interface modes" | grep "AP"
-```
-#### Force nl80211 Interface to wlan0
-```bash
-WIFI_DEV=$(iw dev | awk '/Interface/ {print $2}' | while read dev; do \
-    if iw list | grep -A 20 "Interface $dev" | grep -q "nl80211" && \
-       iw list | grep -A 10 "Supported interface modes" | grep -q "AP"; then \
-        echo "$dev"; break; \
-    fi; \
-done)
-
-if [ -n "$WIFI_DEV" ] && [ "$WIFI_DEV" != "wlan0" ]; then
-    sudo ip link set dev "$WIFI_DEV" down
-    sudo ip link set dev "$WIFI_DEV" name wlan0
-    sudo ip link set dev wlan0 up
-fi
-```
 ### 4. Service Configuration
 #### Create Setup Script
 ```bash
-sudo cat > /usr/local/bin/setup-wlan0-static.sh << 'EOF'
+sudo cat > /usr/local/sbin/wlan0-ap-setup.sh << 'EOF'
 #!/bin/bash
-/sbin/ip link set dev wlan0 up
-/sbin/ip addr flush dev wlan0
-/sbin/ip addr add 192.168.4.1/24 dev wlan0
-if ip addr show wlan0 | grep -q "192.168.4.1/24"; then
+set -e
+
+MAX_TRIES=10
+SLEEP_SEC=1
+
+echo "[wlan0-ap-setup] Waiting for wlan0 to appear..."
+
+for i in $(seq 1 $MAX_TRIES); do
+    if /sbin/ip link show wlan0 >/dev/null 2>&1; then
+        echo "[wlan0-ap-setup] wlan0 is ready on attempt $i"
+        break
+    fi
+    echo "[wlan0-ap-setup] wlan0 not ready yet (attempt $i/$MAX_TRIES), sleeping ${SLEEP_SE
+C}s..."
+    sleep "$SLEEP_SEC"
+done
+
+if ! /sbin/ip link show wlan0 >/dev/null 2>&1; then
+    echo "[wlan0-ap-setup] wlan0 still missing after ${MAX_TRIES} attempts, skipping config
+."
     exit 0
-else
-    exit 1
 fi
+
+/sbin/ip link set wlan0 down || true
+/sbin/ip addr flush dev wlan0 || true
+
+/sbin/ip addr add 192.168.4.1/24 dev wlan0 || true
+/sbin/ip link set wlan0 up || true
+
+echo "[wlan0-ap-setup] Done."
+
 EOF
-sudo chmod +x /usr/local/bin/setup-wlan0-static.sh
+sudo chmod +x sudo chmod +x /usr/local/bin/setup-wlan0-static.sh
 ```
-#### wlan0-static.service
+#### setup-wlan0-static.service
 ```bash
-sudo cat > /etc/systemd/system/wlan0-static.service << 'EOF'
 [Unit]
-Description=Set static IP for wlan0
+Description=Prepare wlan0 for AP mode (set type, channel, IP)
 After=network.target
 Before=hostapd.service dnsmasq.service wifi-portal.service
-Wants=network.target
+
 [Service]
 Type=oneshot
-RemainAfterExit=no
-Restart=on-failure
-RestartSec=3
-TimeoutStartSec=300
-StartLimitIntervalSec=0
-StartLimitBurst=0
-ExecStartPre=/bin/bash -c 'if systemctl is-active --quiet NetworkManager; then nmcli dev set wlan0 managed no 2>/dev/null || true; fi'
-ExecStartPre=/bin/bash -c 'for i in {1..30}; do [ -e /sys/class/net/wlan0 ] && break; sleep 1; done'
-ExecStart=/usr/local/bin/setup-wlan0-static.sh
+ExecStart=/usr/local/sbin/wlan0-ap-setup.sh
+RemainAfterExit=yes
+
 [Install]
 WantedBy=multi-user.target
-EOF
 ```
 #### wifi-portal.service
 ```bash
 sudo cat > /etc/systemd/system/wifi-portal.service << 'EOF'
+cat /etc/systemd/system/wifi-portal.service
 [Unit]
-Description=WiFi Captive Portal Backend
-After=network.target dnsmasq.service hostapd.service
-Wants=dnsmasq.service hostapd.service
+Description=Flask WiFi Captive Portal
+After=network.target hostapd.service dnsmasq.service
+
 [Service]
-Type=simple
-WorkingDirectory=/userdata/wifi-captive-portal/backend
-ExecStart=/usr/bin/python3 /userdata/wifi-captive-portal/backend/app.py
-Restart=on-failure
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
-User=root
-KillMode=process
-[Install]
-WantedBy=multi-user.target
-EOF
-```
-#### Hostapd Service Override
-```bash
-sudo mkdir -p /etc/systemd/system/hostapd.service.d
-sudo cat > /etc/systemd/system/hostapd.service.d/override.conf << 'EOF'
-[Unit]
-Description=Override for hostapd - depend on wlan0-static
-Requires=wlan0-static.service
-After=wlan0-static.service
-StartLimitIntervalSec=180
-StartLimitBurst=10
-[Service]
-Type=forking
-ExecStartPre=/bin/bash -c 'for i in {1..15}; do ip link show wlan0 | grep -q "state UP" && break; sleep 2; done'
-ExecStartPre=/bin/sleep 5
-ExecStart=
-ExecStart=/usr/sbin/hostapd -B -P /run/hostapd.pid /etc/hostapd/hostapd.conf
+ExecStart=/usr/bin/python3 /userdata/projects/wifi-captive-portal/backend/app.py
+WorkingDirectory=/userdata/projects/wifi-captive-portal/backend
 Restart=always
-RestartSec=3
-TimeoutStartSec=45
+User=root
+
 [Install]
 WantedBy=multi-user.target
 EOF
 ```
 ### 5. Configure Hostapd
+cat /etc/systemd/system/hostapd.service
+ ```bash
+[Unit]
+Description=Hostapd WiFi Access Point
+Wants=network.target
+After=network.target wlan0-ap-setup.service
+
+[Service]
+Type=forking
+ExecStart=/usr/sbin/hostapd -B /etc/hostapd/hostapd.conf
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
 ```bash
 sudo cat > /etc/hostapd/hostapd.conf << 'EOF'
 interface=wlan0
 driver=nl80211
+
 ssid=NIMBUS-Setup
-country_code=US
 hw_mode=g
 channel=6
+
 ieee80211n=1
 wmm_enabled=1
+country_code=US
+
 auth_algs=1
 wpa=2
 wpa_key_mgmt=WPA-PSK
 rsn_pairwise=CCMP
 wpa_passphrase=botanika
+
 EOF
 sudo chmod 600 /etc/hostapd/hostapd.conf
 ```
@@ -158,25 +146,134 @@ interface=wlan0
 dhcp-range=192.168.4.100,192.168.4.200,255.255.255.0,24h
 dhcp-option=3,192.168.4.1
 dhcp-option=6,192.168.4.1
-server=8.8.8.8
-server=114.114.114.114
+no-resolv
 log-dhcp
+
+# Captive Portal DNS hijacking
+address=/captive.apple.com/192.168.4.1
+address=/www.apple.com/192.168.4.1
+address=/connectivitycheck.gstatic.com/192.168.4.1
+address=/clients3.google.com/192.168.4.1
+address=/connectivitycheck.android.com/192.168.4.1
+address=/msftconnecttest.com/192.168.4.1
+address=/www.msftconnecttest.com/192.168.4.1
 EOF
 ```
 ### 7. Enable and Start Services
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable wlan0-static hostapd dnsmasq wifi-portal
-sudo systemctl start wlan0-static
+sudo systemctl enable wlan0-ap-setup hostapd dnsmasq wifi-portal
+sudo systemctl start wlan0-ap-setup
 sudo systemctl start hostapd
 sudo systemctl start dnsmasq
 sudo systemctl start wifi-portal
 ```
+
+### 8. Verify Configuration
+```bash
+cat /etc/systemd/system/botanika-agent.service
+[Unit]
+Description=Botanika Agent Service
+After=network-online.target botanika-keyvault.service
+Wants=network-online.target
+Requires=botanika-keyvault.service
+StartLimitInterval=180s
+StartLimitBurst=5
+
+[Service]
+Type=notify
+ExecStartPre=/bin/bash -c 'until ping -c1 api-botanika-stg.blockifyy.com >/dev/null 2>&1; d
+o echo "🔄 Waiting for Internet to reach Botanika API..."; sleep 5; done'
+ExecStart=/opt/botanika-agent/botanika-agent
+Restart=on-failure
+RestartSec=3s
+WatchdogSec=30s
+WorkingDirectory=/opt/botanika-agent/
+
+[Install]
+WantedBy=multi-user.target
+```
 ## Service Verification
 ### Check Service Status
 ```bash
-sudo systemctl status wlan0-static hostapd dnsmasq wifi-portal --no-pager
+sudo systemctl status setup-wlan0-static hostapd dnsmasq wifi-portal --no-pager
 ```
+
+### Checkmount disk: 
+cat /usr/local/bin/auto-prepare-mount.sh
+
+```bash
+#!/bin/bash
+
+MOUNTPOINT="/mnt/data"
+mkdir -p "$MOUNTPOINT"
+
+DISK=$(lsblk -rno NAME,TYPE | awk '$2=="disk"{print "/dev/"$1}' | head -n 1)
+if [ -z "$DISK" ]; then
+    echo "No external disk detected!"
+    exit 0
+fi
+
+echo "🔎 Found disk: $DISK"
+PARTITION=$(lsblk -nrpo NAME,TYPE | awk -v d="$DISK" '$2=="part" && index($1,d)==1 {print $
+1}' | head -n 1)
+
+if [ -z "$PARTITION" ]; then
+    parted --script "$DISK" mklabel gpt
+    parted --script "$DISK" mkpart primary ext4 0% 100%
+    sleep 2
+    
+    PARTITION="${DISK}1"
+    mkfs.ext4 -F "$PARTITION"
+else
+    echo "✔ Found partition: $PARTITION"
+fi
+
+if mountpoint -q "$MOUNTPOINT"; then
+    echo "Already mounted."
+else
+    echo "Mounting $PARTITION to $MOUNTPOINT ..."
+    mount "$PARTITION" "$MOUNTPOINT"
+fi
+
+if mountpoint -q "$MOUNTPOINT"; then
+    echo "Mounted successfully at $MOUNTPOINT"
+else
+    echo "Failed to mount!"
+    exit 1
+fi
+```
+
+```bash
+cat /etc/systemd/system/auto-mount-data.service
+[Unit]
+Description=Auto Mount External Hard Drive to /mnt/data
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/auto-mount-data.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo chmod +x /usr/local/bin/auto-mount-data.sh
+```
+
+```bash
+cat /etc/systemd/network/*.link
+[Match]
+Type=wlan
+
+[Link]
+Name=wlan0
+```
+
+
+
 ### Network Verification
 ```bash
 ip -br addr show wlan0
@@ -189,8 +286,8 @@ curl -I http://192.168.4.1/
 ```bash
 sudo journalctl -u hostapd -f
 sudo journalctl -u wifi-portal -f
-sudo journalctl -u wlan0-static -f
-sudo journalctl -u wlan0-static -u hostapd -u dnsmasq -u wifi-portal --since "5 minutes ago" --no-pager
+sudo journalctl -u setup-wlan0-static -f
+sudo journalctl -u setup-wlan0-static -u hostapd -u dnsmasq -u wifi-portal --since "5 minutes ago" --no-pager
 ```
 ## Reset Script
 ```bash
