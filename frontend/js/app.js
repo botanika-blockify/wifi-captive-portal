@@ -12,6 +12,9 @@ function switchTab(tabName) {
 
   if (tabName === 'wifi') {
     document.getElementById('wifiTab').classList.add('active')
+  } else if (tabName === 'fan') {
+    document.getElementById('fanTab').classList.add('active')
+    loadFanStatus()
   } else if (tabName === 'system') {
     document.getElementById('systemTab').classList.add('active')
     loadAPInfo()
@@ -27,7 +30,7 @@ async function loadAPInfo() {
     const apInfoEl = document.getElementById('apInfo')
 
     if (data.ok) {
-      apInfoEl.innerHTML = `<strong>Current AP:</strong> ${data.ssid})`
+      apInfoEl.innerHTML = `<strong>Current AP:</strong> ${data.ssid}`
     } else {
       apInfoEl.innerHTML = 'Failed to load AP info'
     }
@@ -134,6 +137,132 @@ async function changeAPPassword() {
   }
 }
 
+// Fan Control Functions
+async function loadFanStatus() {
+  try {
+    let res = await fetch('/api/fan/status')
+    let data = await res.json()
+
+    const statusEl = document.getElementById('fanStatus')
+    
+    if (data.ok && data.fan) {
+      const fan = data.fan
+      const statusIcon = fan.running ? '🌀' : '⏸'
+      const statusColor = fan.running ? '#00bd8f' : '#a0a6b0'
+      
+      statusEl.innerHTML = `
+        <span style="color: ${statusColor}">
+          ${statusIcon} <strong>Status:</strong> ${fan.speed_label} 
+          ${fan.auto_mode ? '(Auto Mode)' : '(Manual)'}
+        </span>
+      `
+      
+      // Update speed button active states
+      document.querySelectorAll('.speed-btn').forEach(btn => {
+        const speed = parseInt(btn.dataset.speed)
+        if (speed === fan.speed) {
+          btn.classList.add('active')
+        } else {
+          btn.classList.remove('active')
+        }
+      })
+    } else {
+      statusEl.innerHTML = 'Failed to load fan status'
+    }
+  } catch (e) {
+    console.error('Failed to load fan status:', e)
+    document.getElementById('fanStatus').innerHTML = 'Error loading fan status'
+  }
+}
+
+async function toggleFan() {
+  const btn = document.getElementById('fanToggleBtn')
+  const successEl = document.getElementById('fanSuccess')
+  const errorEl = document.getElementById('fanError')
+  
+  // Clear messages
+  successEl.innerText = ''
+  errorEl.innerText = ''
+  errorEl.style.animation = 'none'
+  successEl.style.animation = 'none'
+  void errorEl.offsetWidth
+  void successEl.offsetWidth
+  
+  btn.disabled = true
+  btn.classList.add('loading')
+  
+  try {
+    let res = await fetch('/api/fan/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    })
+    
+    let data = await res.json()
+    
+    if (data.ok) {
+      successEl.innerHTML = `✓ ${data.fan.message}`
+      successEl.style.animation = 'fadeIn 0.5s forwards'
+      await loadFanStatus()
+      
+      setTimeout(() => {
+        successEl.style.animation = 'fadeOut 0.5s forwards'
+      }, 2000)
+    } else {
+      errorEl.innerHTML = data.error || 'Failed to toggle fan'
+      errorEl.className = 'err'
+      errorEl.style.animation = 'fadeIn 0.5s forwards'
+    }
+  } catch (e) {
+    errorEl.innerHTML = 'Error toggling fan'
+    errorEl.className = 'err'
+    errorEl.style.animation = 'fadeIn 0.5s forwards'
+  } finally {
+    btn.disabled = false
+    btn.classList.remove('loading')
+  }
+}
+
+async function setFanSpeed(speed) {
+  const successEl = document.getElementById('fanSuccess')
+  const errorEl = document.getElementById('fanError')
+  
+  // Clear messages
+  successEl.innerText = ''
+  errorEl.innerText = ''
+  errorEl.style.animation = 'none'
+  successEl.style.animation = 'none'
+  void errorEl.offsetWidth
+  void successEl.offsetWidth
+  
+  try {
+    let res = await fetch('/api/fan/speed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ speed }),
+    })
+    
+    let data = await res.json()
+    
+    if (data.ok) {
+      successEl.innerHTML = `✓ ${data.fan.message}`
+      successEl.style.animation = 'fadeIn 0.5s forwards'
+      await loadFanStatus()
+      
+      setTimeout(() => {
+        successEl.style.animation = 'fadeOut 0.5s forwards'
+      }, 2000)
+    } else {
+      errorEl.innerHTML = data.error || 'Failed to set fan speed'
+      errorEl.className = 'err'
+      errorEl.style.animation = 'fadeIn 0.5s forwards'
+    }
+  } catch (e) {
+    errorEl.innerHTML = 'Error setting fan speed'
+    errorEl.className = 'err'
+    errorEl.style.animation = 'fadeIn 0.5s forwards'
+  }
+}
+
 // WiFi Tab - Connection Management
 async function loadCurrentConnection() {
   try {
@@ -150,7 +279,7 @@ async function loadCurrentConnection() {
             <div class="current-connection-icon">✓</div>
             <div class="current-connection-text">
               <div class="current-connection-ssid">${data.ssid}</div>
-              <div class="current-connection-status">Connected • ${data.interface}</div>
+              <div class="current-connection-status">Connected</div>
             </div>
           </div>
           <div style="display: flex; align-items: center; gap: 6px;">

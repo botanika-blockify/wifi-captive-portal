@@ -1,22 +1,30 @@
-import os, subprocess, shlex
+import os
 import time
-import re
+import subprocess
+import shlex
+import string
 from flask import Flask, request, jsonify, send_from_directory, redirect, Response
+from service import FanService, WiFiService
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "frontend"))
 AP_IFACE = "p2p0"     
 CLIENT_IFACE = "wlan0"   
-WIFI_IFACE = CLIENT_IFACE  
 
 app = Flask(__name__, static_folder=None)
+
+# Initialize services
+fan_service = FanService()
+wifi_service = WiFiService(client_iface=CLIENT_IFACE, ap_iface=AP_IFACE)
 
 class Config:
     MAX_CONNECTION_ATTEMPTS = 3
     CONNECTION_TIMEOUT = 45
     SCAN_TIMEOUT = 15
 
-def run(cmd: str, timeout=30):
+# Helper function for AP password management (keep only what's needed)
+def run_command(cmd: str, timeout=30):
+    """Execute shell command - used only for system operations"""
     p = None
     try:
         p = subprocess.Popen(shlex.split(cmd), 
@@ -32,10 +40,8 @@ def run(cmd: str, timeout=30):
     except Exception as e:
         return -1, "", str(e)
 
-def sanitize_password(password):
+def sanitize_ap_password(password):
     """Sanitize and validate password for hostapd.conf"""
-    # Remove any special shell characters that could cause injection
-    # WPA2 passwords can only contain ASCII printable characters
     if not password:
         return None
     
@@ -43,12 +49,10 @@ def sanitize_password(password):
     if len(password) < 8 or len(password) > 63:
         return None
     
-    # Only allow ASCII printable characters (no shell special chars)
-    import string
+    # Only allow ASCII printable characters
     allowed_chars = string.ascii_letters + string.digits + string.punctuation
     
-    # Remove any characters that could cause issues in config file
-    # Specifically block: backticks, $, quotes that could break config
+    # Block dangerous characters
     dangerous_chars = ['`', '$', '\\', '\n', '\r', '\0']
     
     for char in password:
@@ -57,133 +61,70 @@ def sanitize_password(password):
     
     return password
 
-def sanitize_connection_name(name):
-    """Sanitize connection name to prevent command injection"""
-    # Only allow alphanumeric, spaces, hyphens, underscores, dots
-    if not re.match(r'^[a-zA-Z0-9 _\-\.]+$', name):
-        return None
-    return name
-
-def is_client_connected():
-    try:
-        code, out, _ = run(f"nmcli -t dev status | grep {CLIENT_IFACE}")
-        if code == 0 and "connected" in out:
-            return True
-        
-        code, out, _ = run(f"iwconfig {CLIENT_IFACE}")
-        if code == 0 and "ESSID" in out and "off/any" not in out:
-            return True
-            
-        return False
-    except:
-        return False
-
-def validate_ssid(ssid):
-    if not ssid or len(ssid) > 32:
-        return False
-    import re
-    if not re.match(r'^[a-zA-Z0-9_\-\.\s\u0080-\uFFFF]+$', ssid):
-        return False
-    return True
-
-def validate_password(password):
-    if password and len(password) > 64:
-        return False
-    return True
-
-def get_wifi_security_type(ssid):
-    try:
-        code, out, err = run("nmcli -t -f SSID,SECURITY dev wifi list", timeout=10)
-        if code == 0 and out:
-            for line in out.splitlines():
-                parts = line.split(":")
-                if len(parts) >= 2:
-                    current_ssid = ":".join(parts[:-1])
-                    security = parts[-1]
-                    if current_ssid == ssid:
-                        return security
-        return "unknown"
-    except Exception as e:
-        return "unknown"
-
 @app.get("/api/scan")
 def api_scan():
     try:
-        code, out, err = run(f"nmcli -t -f SSID,SIGNAL,SECURITY dev wifi list ifname {CLIENT_IFACE}", 
-                           timeout=Config.SCAN_TIMEOUT)
+        result = wifi_service.scan_networks(timeout=Config.SCAN_TIMEOUT)
         
-        networks = []
-        if code == 0 and out:
-            for line in out.splitlines():
-                parts = line.split(":")
-                if len(parts) >= 3:
-                    security = parts[-1]
-                    signal = parts[-2]
-                    ssid = ":".join(parts[:-2])
-                    if ssid and ssid != "--":
-                        networks.append({
-                            "ssid": ssid, 
-                            "signal": int(signal) if signal.isdigit() else None, 
-                            "security": security
-                        })
+        if not result["success"]:
+            return jsonify({"ok": False, "error": "Scan failed"}), 500
         
-        networks.sort(key=lambda x: x["signal"] or 0, reverse=True)
+        networks = result.get("networks", [])
+        
+        conn_result = wifi_service.get_current_connection()
+        current_ssid = None
+        
+        if conn_result.get("success") and conn_result.get("connected"):
+            ssid_value = conn_result.get("ssid")
+            current_ssid = ssid_value.strip() if isinstance(ssid_value, str) else None
+        
+        if current_ssid:
+            networks = [net for net in networks if net.get("ssid", "").strip() != current_ssid]
         
         return jsonify({"ok": True, "networks": networks})
-    
+        
     except Exception as e:
+        print(f"Error in api_scan: {e}")
         return jsonify({"ok": False, "error": "Scan failed"}), 500
 
 @app.post("/api/connect")
 def api_connect():
-    data = request.get_json(silent=True) or {}
-    ssid = (data.get("ssid") or "").strip()
-    pwd = (data.get("password") or "").strip()
+    """Connect to WiFi network"""
+    try:
+        data = request.get_json(silent=True) or {}
+        ssid = (data.get("ssid") or "").strip()
+        pwd = (data.get("password") or "").strip()
 
-    if not ssid:
-        return jsonify({"ok": False, "error": "SSID required"}), 400
+        if not ssid:
+            return jsonify({"ok": False, "error": "SSID required"}), 400
 
-    if not validate_ssid(ssid):
-        return jsonify({"ok": False, "error": "Invalid SSID"}), 400
-    
-    if not validate_password(pwd):
-        return jsonify({"ok": False, "error": "Invalid password"}), 400
-
-    run(f"nmcli device set {CLIENT_IFACE} managed yes", timeout=5)
-    run(f"nmcli device set {AP_IFACE} managed no", timeout=5)
-
-    ssid_escaped = shlex.quote(ssid)
-    pwd_escaped = shlex.quote(pwd) if pwd else ""
-
-    if pwd:
-        cmd = f"nmcli --wait 40 dev wifi connect {ssid_escaped} password {pwd_escaped} ifname {CLIENT_IFACE}"
-    else:
-        cmd = f"nmcli --wait 40 dev wifi connect {ssid_escaped} ifname {CLIENT_IFACE}"
-
-    code, out, err = run(cmd, timeout=40)
-
-    if code == 0:
-        return jsonify({"ok": True, "message": "Connected"}), 200
-
-    return jsonify({
-        "ok": False,
-        "error": "Connection failed. Please try again"
-    }), 400
+        result = wifi_service.connect_network(ssid, pwd, timeout=40)
+        
+        if result["success"]:
+            return jsonify({"ok": True, "message": result["message"]}), 200
+        else:
+            return jsonify({"ok": False, "error": result["error"]}), 400
+    except Exception as e:
+        print(f"Error in api_connect: {e}")
+        return jsonify({"ok": False, "error": "Connection failed"}), 500
 
 @app.get("/api/status")
 def api_status():
+    """Get system status"""
     try:
-        code_ip, out_ip, _ = run(f"ip -br addr show dev {CLIENT_IFACE}")
-        code_rt, out_rt, _ = run("ip route show default")
-        code_ping, _, _ = run("ping -c1 -w2 8.8.8.8")
-        code_conn, out_conn, _ = run("nmcli -t connection show --active")
+        code_ip, out_ip, _ = run_command(f"ip -br addr show dev {CLIENT_IFACE}")
+        code_rt, out_rt, _ = run_command("ip route show default")
+        code_ping, _, _ = run_command("ping -c1 -w2 8.8.8.8")
+        code_conn, out_conn, _ = run_command("nmcli -t connection show --active")
         
-        code_wifi, out_wifi, _ = run(f"iwconfig {CLIENT_IFACE}")
+        code_wifi, out_wifi, _ = run_command(f"iwconfig {CLIENT_IFACE}")
         
-        code_ap, _, _ = run("sudo systemctl is-active hostapd")
+        code_ap, _, _ = run_command("sudo systemctl is-active hostapd")
         ap_active = (code_ap == 0)
         
-        client_connected = is_client_connected()
+        # Get client connection status from WiFi service
+        conn_result = wifi_service.get_current_connection()
+        client_connected = conn_result.get("success") and conn_result.get("connected", False)
         
         return jsonify({
             "ok": True, 
@@ -203,8 +144,12 @@ def api_status():
 
 @app.get("/api/health")
 def api_health():
-    client_connected = is_client_connected()
-    code_ap, _, _ = run("sudo systemctl is-active hostapd")
+    """Health check endpoint"""
+    # Get client connection status from WiFi service
+    conn_result = wifi_service.get_current_connection()
+    client_connected = conn_result.get("success") and conn_result.get("connected", False)
+    
+    code_ap, _, _ = run_command("sudo systemctl is-active hostapd")
     ap_active = (code_ap == 0)
     
     return jsonify({
@@ -278,173 +223,73 @@ def success_txt():
 def api_current_connection():
     """Get currently connected WiFi network on client interface"""
     try:
-        # Check active connection on client interface
-        code, out, _ = run(f"nmcli -t -f NAME,TYPE,DEVICE connection show --active")
+        result = wifi_service.get_current_connection()
         
-        current_ssid = None
-        if code == 0 and out:
-            for line in out.splitlines():
-                parts = line.split(":")
-                if len(parts) >= 3 and parts[2] == CLIENT_IFACE:
-                    conn_name = parts[0]
-                    # Sanitize connection name to prevent injection
-                    safe_conn_name = sanitize_connection_name(conn_name)
-                    if not safe_conn_name:
-                        continue
-                    # Get SSID from connection
-                    code2, out2, _ = run(f"nmcli -t -f 802-11-wireless.ssid connection show {shlex.quote(safe_conn_name)}")
-                    if code2 == 0 and out2:
-                        ssid_line = out2.split(":", 1)
-                        if len(ssid_line) > 1:
-                            current_ssid = ssid_line[1].strip()
-                    break
-        
-        # Fallback: check iwconfig
-        if not current_ssid:
-            code, out, _ = run(f"iwconfig {CLIENT_IFACE}")
-            if code == 0 and 'ESSID:"' in out:
-                import re
-                match = re.search(r'ESSID:"([^"]+)"', out)
-                if match:
-                    current_ssid = match.group(1)
-        
-        if current_ssid and current_ssid != "off/any":
-            # Get signal strength for the connected SSID
-            code, out, _ = run(f"nmcli -t -f SSID,SIGNAL dev wifi list ifname {CLIENT_IFACE}")
-            signal = None
-            if code == 0 and out:
-                for line in out.splitlines():
-                    parts = line.split(":")
-                    if len(parts) >= 2:
-                        ssid = ":".join(parts[:-1])  # Handle SSIDs with colons
-                        sig = parts[-1]
-                        if ssid == current_ssid and sig.isdigit():
-                            signal = int(sig)
-                            break
-            
-            return jsonify({
-                "ok": True,
-                "connected": True,
-                "ssid": current_ssid,
-                "signal": signal,
-                "interface": CLIENT_IFACE
-            })
+        if result["success"]:
+            if result.get("connected"):
+                return jsonify({
+                    "ok": True,
+                    "connected": True,
+                    "ssid": result["ssid"],
+                    "signal": result.get("signal"),
+                    "interface": result["interface"]
+                })
+            else:
+                return jsonify({"ok": True, "connected": False})
         else:
-            return jsonify({"ok": True, "connected": False})
-    
+            return jsonify({"ok": False, "error": "Failed to get connection status"}), 500
     except Exception as e:
-        print(f"Error in api_current_connection: {e}")  # Log to server only
+        print(f"Error in api_current_connection: {e}")
         return jsonify({"ok": False, "error": "Failed to get connection status"}), 500
 
 @app.get("/api/saved-networks")
 def api_saved_networks():
     """Get list of saved WiFi networks"""
     try:
-        code, out, _ = run("nmcli -t -f NAME,TYPE connection show")
+        result = wifi_service.get_saved_networks()
         
-        saved_networks = []
-        if code == 0 and out:
-            for line in out.splitlines():
-                parts = line.split(":")
-                if len(parts) >= 2 and "wifi" in parts[1].lower():
-                    conn_name = parts[0]
-                    # Sanitize connection name
-                    safe_conn_name = sanitize_connection_name(conn_name)
-                    if not safe_conn_name:
-                        continue
-                    # Get SSID from connection
-                    code2, out2, _ = run(f"nmcli -t -f 802-11-wireless.ssid connection show {shlex.quote(safe_conn_name)}")
-                    if code2 == 0 and out2:
-                        ssid_line = out2.split(":", 1)
-                        if len(ssid_line) > 1:
-                            ssid = ssid_line[1].strip()
-                            if ssid and ssid not in [n["ssid"] for n in saved_networks]:
-                                saved_networks.append({
-                                    "ssid": ssid,
-                                    "connection_name": conn_name
-                                })
-        
-        return jsonify({"ok": True, "networks": saved_networks})
-    
+        if result["success"]:
+            return jsonify({"ok": True, "networks": result["networks"]})
+        else:
+            return jsonify({"ok": False, "error": "Failed to load saved networks"}), 500
     except Exception as e:
-        print(f"Error in api_saved_networks: {e}")  # Log to server only
+        print(f"Error in api_saved_networks: {e}")
         return jsonify({"ok": False, "error": "Failed to load saved networks"}), 500
 
 @app.post("/api/forget-network")
 def api_forget_network():
     """Delete a saved WiFi connection"""
-    data = request.get_json(silent=True) or {}
-    ssid = (data.get("ssid") or "").strip()
-    
-    if not ssid:
-        return jsonify({"ok": False, "error": "SSID required"}), 400
-    
     try:
-        # Find connection by SSID
-        code, out, _ = run("nmcli -t -f NAME,TYPE connection show")
+        data = request.get_json(silent=True) or {}
+        ssid = (data.get("ssid") or "").strip()
         
-        deleted = False
-        if code == 0 and out:
-            for line in out.splitlines():
-                parts = line.split(":")
-                if len(parts) >= 2 and "wifi" in parts[1].lower():
-                    conn_name = parts[0]
-                    # Sanitize connection name
-                    safe_conn_name = sanitize_connection_name(conn_name)
-                    if not safe_conn_name:
-                        continue
-                    # Check if this connection matches the SSID
-                    code2, out2, _ = run(f"nmcli -t -f 802-11-wireless.ssid connection show {shlex.quote(safe_conn_name)}")
-                    if code2 == 0 and out2:
-                        ssid_line = out2.split(":", 1)
-                        if len(ssid_line) > 1 and ssid_line[1].strip() == ssid:
-                            # Delete this connection
-                            code3, _, _ = run(f"nmcli connection delete {shlex.quote(safe_conn_name)}")
-                            if code3 == 0:
-                                deleted = True
-                                break
+        if not ssid:
+            return jsonify({"ok": False, "error": "SSID required"}), 400
         
-        if deleted:
-            return jsonify({"ok": True, "message": f"Forgot network: {ssid}"})
+        result = wifi_service.forget_network(ssid)
+        
+        if result["success"]:
+            return jsonify({"ok": True, "message": result["message"]})
         else:
-            return jsonify({"ok": False, "error": "Network not found"}), 404
-    
+            return jsonify({"ok": False, "error": result["error"]}), 404
     except Exception as e:
-        print(f"Error in api_forget_network: {e}")  # Log to server only
+        print(f"Error in api_forget_network: {e}")
         return jsonify({"ok": False, "error": "Failed to forget network"}), 500
 
 @app.post("/api/disconnect-current")
 def api_disconnect_current():
     """Disconnect and forget current WiFi connection"""
     try:
-        # Get current connection on client interface
-        code, out, _ = run(f"nmcli -t -f NAME,TYPE,DEVICE connection show --active")
+        result = wifi_service.disconnect_current()
         
-        current_conn_name = None
-        if code == 0 and out:
-            for line in out.splitlines():
-                parts = line.split(":")
-                if len(parts) >= 3 and parts[2] == CLIENT_IFACE:
-                    conn_name = parts[0]
-                    # Sanitize connection name
-                    safe_conn_name = sanitize_connection_name(conn_name)
-                    if safe_conn_name:
-                        current_conn_name = safe_conn_name
-                        break
-        
-        if not current_conn_name:
-            return jsonify({"ok": False, "error": "No active connection"}), 404
-        
-        # Disconnect and delete the connection
-        code, _, _ = run(f"nmcli connection delete {shlex.quote(current_conn_name)}")
-        
-        if code == 0:
-            return jsonify({"ok": True, "message": "Disconnected and forgot current network"})
+        if result["success"]:
+            return jsonify({"ok": True, "message": result["message"]})
         else:
-            return jsonify({"ok": False, "error": "Failed to disconnect"}), 500
-    
+            error_msg = result.get("error", "")
+            error_code = 404 if isinstance(error_msg, str) and "No active" in error_msg else 500
+            return jsonify({"ok": False, "error": error_msg}), error_code
     except Exception as e:
-        print(f"Error in api_disconnect_current: {e}")  # Log to server only
+        print(f"Error in api_disconnect_current: {e}")
         return jsonify({"ok": False, "error": "Failed to disconnect"}), 500
 
 @app.post("/api/change-ap-password")
@@ -454,7 +299,7 @@ def api_change_ap_password():
     new_password = (data.get("password") or "").strip()
     
     # Sanitize and validate password
-    sanitized_password = sanitize_password(new_password)
+    sanitized_password = sanitize_ap_password(new_password)
     
     if not sanitized_password:
         if not new_password:
@@ -498,11 +343,10 @@ def api_change_ap_password():
         shutil.move(tmp_path, hostapd_conf)
         
         # Set proper permissions
-        import os
         os.chmod(hostapd_conf, 0o600)
         
         # Restart hostapd to apply changes
-        run("sudo systemctl restart hostapd", timeout=10)
+        run_command("sudo systemctl restart hostapd", timeout=10)
         time.sleep(2)
         
         return jsonify({"ok": True, "message": "AP password updated successfully"})
@@ -536,6 +380,53 @@ def api_ap_info():
     except Exception as e:
         print(f"Error in api_ap_info: {e}")
         return jsonify({"ok": False, "error": "Failed to get AP info"}), 500
+
+# Fan Control APIs
+@app.get("/api/fan/status")
+def api_fan_status():
+    """Get current fan status"""
+    try:
+        status = fan_service.get_status()
+        return jsonify({"ok": True, "fan": status})
+    except Exception as e:
+        print(f"Error in api_fan_status: {e}")
+        return jsonify({"ok": False, "error": "Failed to get fan status"}), 500
+
+@app.post("/api/fan/speed")
+def api_fan_set_speed():
+    """Set fan speed (0-3)"""
+    try:
+        data = request.get_json(silent=True) or {}
+        speed = data.get("speed")
+        
+        if speed is None:
+            return jsonify({"ok": False, "error": "Speed required"}), 400
+        
+        result = fan_service.set_speed(speed)
+        
+        if result.get("success"):
+            return jsonify({"ok": True, "fan": result})
+        else:
+            return jsonify({"ok": False, "error": result.get("error")}), 400
+    
+    except Exception as e:
+        print(f"Error in api_fan_set_speed: {e}")
+        return jsonify({"ok": False, "error": "Failed to set fan speed"}), 500
+
+@app.post("/api/fan/toggle")
+def api_fan_toggle():
+    """Toggle fan on/off"""
+    try:
+        result = fan_service.toggle()
+        
+        if result.get("success"):
+            return jsonify({"ok": True, "fan": result})
+        else:
+            return jsonify({"ok": False, "error": result.get("error")}), 400
+    
+    except Exception as e:
+        print(f"Error in api_fan_toggle: {e}")
+        return jsonify({"ok": False, "error": "Failed to toggle fan"}), 500
 
 @app.get("/canonical.html")
 def canonical_html():

@@ -657,3 +657,91 @@ button.loading span {
   background: #f28c38;
   border-radius: 8px;
 }
+
+/* Fan Control Styles */
+.fan-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fan-btn {
+  font: inherit;
+  padding: 12px;
+  border-radius: 8px;
+  border: none;
+  background: #f28c38;
+  color: #ffffff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.fan-btn:hover {
+  background: #e07b30;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(242, 140, 56, 0.3);
+}
+
+.fan-btn:active {
+  transform: translateY(0);
+}
+
+.fan-btn:disabled {
+  background: #4a4f56;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.fan-btn.loading .loader {
+  display: block;
+}
+
+.fan-speed-controls {
+  display: flex;
+  flex-direction: column;
+}
+
+.speed-buttons {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.speed-btn {
+  font: inherit;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #2f343b;
+  background: #181c20;
+  color: #a0a6b0;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.speed-btn:hover {
+  background: #252a30;
+  border-color: #f28c38;
+  color: #f28c38;
+}
+
+.speed-btn.active {
+  background: #f28c38;
+  border-color: #f28c38;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(242, 140, 56, 0.3);
+}
+
+.speed-btn:active {
+  transform: scale(0.95);
+}

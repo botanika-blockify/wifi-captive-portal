@@ -234,6 +234,74 @@
         <p id="apError"></p>
       </div>
       <!-- End System Tab -->
+
+      <!-- Fan Tab -->
+      <div
+        id="fanTab"
+        class="tab-content"
+      >
+        <div class="section-title">Fan Control</div>
+
+        <div
+          id="fanStatus"
+          style="margin-bottom: 16px; color: #a0a6b0; font-size: 13px"
+        >
+          Loading fan status...
+        </div>
+
+        <div class="fan-controls">
+          <button
+            id="fanToggleBtn"
+            class="fan-btn fan-toggle"
+            onclick="toggleFan()"
+          >
+            <span>Toggle Fan</span><span class="loader"></span>
+          </button>
+
+          <div class="fan-speed-controls">
+            <label style="color: #a0a6b0; font-size: 13px; font-weight: 500; margin-bottom: 12px; display: block"
+              >Fan Speed</label
+            >
+            <div class="speed-buttons">
+              <button
+                class="speed-btn"
+                onclick="setFanSpeed(0)"
+                data-speed="0"
+              >
+                Off
+              </button>
+              <button
+                class="speed-btn"
+                onclick="setFanSpeed(1)"
+                data-speed="1"
+              >
+                Low
+              </button>
+              <button
+                class="speed-btn"
+                onclick="setFanSpeed(2)"
+                data-speed="2"
+              >
+                Med
+              </button>
+              <button
+                class="speed-btn"
+                onclick="setFanSpeed(3)"
+                data-speed="3"
+              >
+                High
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <p
+          id="fanSuccess"
+          class="ok"
+        ></p>
+        <p id="fanError"></p>
+      </div>
+      <!-- End Fan Tab -->
     </div>
 
     <!-- Disconnect Confirmation Modal -->
