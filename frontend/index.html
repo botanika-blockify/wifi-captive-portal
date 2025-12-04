@@ -145,7 +145,7 @@
         gap: 6px;
       }
       .err {
-        color: #ff7125;
+        color: #ff4444;
         font-size: 14px;
         font-weight: 600;
         text-align: center;
@@ -287,24 +287,22 @@
         width: 16px;
         height: 16px;
         animation: spin 1s linear infinite;
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
+        flex-shrink: 0;
       }
       @keyframes spin {
         0% {
-          transform: translate(-50%, -50%) rotate(0deg);
+          transform: rotate(0deg);
         }
         100% {
-          transform: translate(-50%, -50%) rotate(360deg);
+          transform: rotate(360deg);
         }
       }
       button.loading .loader {
         display: block;
       }
       button.loading span {
-        opacity: 0;
+        visibility: visible;
+        opacity: 1;
       }
       .scanning-overlay {
         position: absolute;
@@ -358,6 +356,95 @@
         flex-shrink: 0;
         font-size: 12px;
       }
+      .current-connection {
+        background: #1a3a2e;
+        border: 1px solid #00bd8f;
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .current-connection-info {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+      }
+      .current-connection-icon {
+        color: #00bd8f;
+        font-size: 16px;
+        flex-shrink: 0;
+      }
+      .current-connection-text {
+        flex: 1;
+      }
+      .current-connection-ssid {
+        color: #00bd8f;
+        font-weight: 600;
+        font-size: 14px;
+      }
+      .current-connection-status {
+        color: #a0a6b0;
+        font-size: 12px;
+        margin-top: 2px;
+      }
+      .section-title {
+        color: #a0a6b0;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin: 16px 0 8px 0;
+      }
+      .saved-network {
+        padding: 10px 12px;
+        border: 1px solid #2f343b;
+        border-radius: 8px;
+        margin-bottom: 8px;
+        background: #181c20;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .saved-network-name {
+        color: #ffffff;
+        font-size: 14px;
+        flex: 1;
+      }
+      .forget-btn {
+        background: none;
+        border: none;
+        color: #ff4444;
+        font-size: 12px;
+        cursor: pointer;
+        padding: 4px 8px;
+        border-radius: 4px;
+        transition: all 0.2s ease;
+        font-weight: 500;
+      }
+      .forget-btn:hover {
+        background: rgba(255, 68, 68, 0.1);
+      }
+      .saved-networks-list {
+        max-height: 120px;
+        overflow-y: auto;
+        padding-right: 6px;
+      }
+      .saved-networks-list::-webkit-scrollbar {
+        width: 4px;
+      }
+      .saved-networks-list::-webkit-scrollbar-track {
+        background: #181c20;
+        border-radius: 8px;
+      }
+      .saved-networks-list::-webkit-scrollbar-thumb {
+        background: #f28c38;
+        border-radius: 8px;
+      }
     </style>
   </head>
   <body>
@@ -368,6 +455,24 @@
         class="logo"
       />
       <h1>Connect to Wi-Fi</h1>
+
+      <!-- Current Connection Status -->
+      <div
+        id="currentConnection"
+        style="display: none"
+      ></div>
+
+      <!-- Saved Networks -->
+      <div
+        id="savedNetworksSection"
+        style="display: none"
+      >
+        <div class="section-title">My Networks</div>
+        <div
+          id="savedNetworksList"
+          class="saved-networks-list"
+        ></div>
+      </div>
 
       <div class="form-group">
         <button
@@ -473,6 +578,87 @@
     <script>
       let currentNetworks = []
 
+      async function loadCurrentConnection() {
+        try {
+          let res = await fetch('/api/current-connection')
+          let data = await res.json()
+
+          const container = document.getElementById('currentConnection')
+
+          if (data.ok && data.connected) {
+            const signalIcon = createSignalIcon(data.signal)
+            container.innerHTML = `
+              <div class="current-connection">
+                <div class="current-connection-info">
+                  <div class="current-connection-icon">✓</div>
+                  <div class="current-connection-text">
+                    <div class="current-connection-ssid">${data.ssid}</div>
+                    <div class="current-connection-status">Connected • ${data.interface}</div>
+                  </div>
+                </div>
+                ${signalIcon}
+              </div>
+            `
+            container.style.display = 'block'
+          } else {
+            container.style.display = 'none'
+          }
+        } catch (e) {
+          console.error('Failed to load current connection:', e)
+        }
+      }
+
+      async function loadSavedNetworks() {
+        try {
+          let res = await fetch('/api/saved-networks')
+          let data = await res.json()
+
+          const section = document.getElementById('savedNetworksSection')
+          const list = document.getElementById('savedNetworksList')
+
+          if (data.ok && data.networks && data.networks.length > 0) {
+            list.innerHTML = data.networks
+              .map(
+                (net) => `
+              <div class="saved-network">
+                <div class="saved-network-name">${net.ssid}</div>
+                <button class="forget-btn" onclick="forgetNetwork('${net.ssid.replace(/'/g, "\\'")}')">Forget</button>
+              </div>
+            `
+              )
+              .join('')
+            section.style.display = 'block'
+          } else {
+            section.style.display = 'none'
+          }
+        } catch (e) {
+          console.error('Failed to load saved networks:', e)
+        }
+      }
+
+      async function forgetNetwork(ssid) {
+        if (!confirm(`Forget network "${ssid}"?`)) return
+
+        try {
+          let res = await fetch('/api/forget-network', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ssid }),
+          })
+
+          let data = await res.json()
+
+          if (data.ok) {
+            await loadSavedNetworks()
+            await loadCurrentConnection()
+          } else {
+            alert('Failed to forget network: ' + (data.error || 'Unknown error'))
+          }
+        } catch (e) {
+          alert('Error forgetting network')
+        }
+      }
+
       function clearMessages() {
         const errorEl = document.getElementById('error')
         const successEl = document.getElementById('success')
@@ -566,6 +752,10 @@
           scanBtn.classList.remove('loading')
           ssidList.classList.remove('scanning')
           scanningOverlay.classList.remove('active')
+
+          // Refresh connection status after scan
+          loadCurrentConnection()
+          loadSavedNetworks()
         }
       }
 
@@ -599,7 +789,7 @@
 
         if (!ssid) {
           const errorEl = document.getElementById('error')
-          errorEl.innerHTML = '<span class="message-icon">❌</span> Please enter a network name'
+          errorEl.innerHTML = 'Please enter a network name'
           errorEl.className = 'err'
           errorEl.style.animation = 'fadeIn 0.5s forwards'
           return
@@ -607,7 +797,7 @@
 
         connectBtn.disabled = true
         connectBtn.classList.add('loading')
-        resultEl.innerText = 'Connecting...'
+        connectBtn.querySelector('span').innerText = 'Connecting'
 
         try {
           let res = await fetch('/api/connect', {
@@ -623,20 +813,21 @@
           } else {
             const errorEl = document.getElementById('error')
             const errorMsg = data.error || 'Unable to join this network. Please try again.'
-            errorEl.innerHTML = `<span class="message-icon">❌</span> ${errorMsg}`
+            errorEl.innerHTML = `${errorMsg}`
             errorEl.className = 'err'
             errorEl.style.animation = 'fadeIn 0.5s forwards'
             resultEl.innerText = ''
           }
         } catch (e) {
           const errorEl = document.getElementById('error')
-          errorEl.innerHTML = '<span class="message-icon">❌</span> Connection failed. Please try again.'
+          errorEl.innerHTML = 'Connection failed. Please try again.'
           errorEl.className = 'err'
           errorEl.style.animation = 'fadeIn 0.5s forwards'
           resultEl.innerText = ''
         } finally {
           connectBtn.disabled = false
           connectBtn.classList.remove('loading')
+          connectBtn.querySelector('span').innerText = 'Connect'
         }
       }
 
@@ -644,6 +835,9 @@
         document.getElementById('scanBtn').onclick = scan
         document.getElementById('connectBtn').onclick = connect
 
+        // Load initial data
+        loadCurrentConnection()
+        loadSavedNetworks()
         scan()
 
         document.getElementById('pwdInput').addEventListener('keypress', function (e) {
