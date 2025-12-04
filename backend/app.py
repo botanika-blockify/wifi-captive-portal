@@ -1,5 +1,6 @@
 import os, subprocess, shlex
 import time
+import re
 from flask import Flask, request, jsonify, send_from_directory, redirect, Response
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -30,6 +31,38 @@ def run(cmd: str, timeout=30):
         return -1, "", "Command timed out"
     except Exception as e:
         return -1, "", str(e)
+
+def sanitize_password(password):
+    """Sanitize and validate password for hostapd.conf"""
+    # Remove any special shell characters that could cause injection
+    # WPA2 passwords can only contain ASCII printable characters
+    if not password:
+        return None
+    
+    # Check length (WPA2 standard: 8-63 characters)
+    if len(password) < 8 or len(password) > 63:
+        return None
+    
+    # Only allow ASCII printable characters (no shell special chars)
+    import string
+    allowed_chars = string.ascii_letters + string.digits + string.punctuation
+    
+    # Remove any characters that could cause issues in config file
+    # Specifically block: backticks, $, quotes that could break config
+    dangerous_chars = ['`', '$', '\\', '\n', '\r', '\0']
+    
+    for char in password:
+        if char not in allowed_chars or char in dangerous_chars:
+            return None
+    
+    return password
+
+def sanitize_connection_name(name):
+    """Sanitize connection name to prevent command injection"""
+    # Only allow alphanumeric, spaces, hyphens, underscores, dots
+    if not re.match(r'^[a-zA-Z0-9 _\-\.]+$', name):
+        return None
+    return name
 
 def is_client_connected():
     try:
@@ -254,8 +287,12 @@ def api_current_connection():
                 parts = line.split(":")
                 if len(parts) >= 3 and parts[2] == CLIENT_IFACE:
                     conn_name = parts[0]
+                    # Sanitize connection name to prevent injection
+                    safe_conn_name = sanitize_connection_name(conn_name)
+                    if not safe_conn_name:
+                        continue
                     # Get SSID from connection
-                    code2, out2, _ = run(f"nmcli -t -f 802-11-wireless.ssid connection show '{conn_name}'")
+                    code2, out2, _ = run(f"nmcli -t -f 802-11-wireless.ssid connection show {shlex.quote(safe_conn_name)}")
                     if code2 == 0 and out2:
                         ssid_line = out2.split(":", 1)
                         if len(ssid_line) > 1:
@@ -296,7 +333,8 @@ def api_current_connection():
             return jsonify({"ok": True, "connected": False})
     
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+        print(f"Error in api_current_connection: {e}")  # Log to server only
+        return jsonify({"ok": False, "error": "Failed to get connection status"}), 500
 
 @app.get("/api/saved-networks")
 def api_saved_networks():
@@ -310,8 +348,12 @@ def api_saved_networks():
                 parts = line.split(":")
                 if len(parts) >= 2 and "wifi" in parts[1].lower():
                     conn_name = parts[0]
+                    # Sanitize connection name
+                    safe_conn_name = sanitize_connection_name(conn_name)
+                    if not safe_conn_name:
+                        continue
                     # Get SSID from connection
-                    code2, out2, _ = run(f"nmcli -t -f 802-11-wireless.ssid connection show '{conn_name}'")
+                    code2, out2, _ = run(f"nmcli -t -f 802-11-wireless.ssid connection show {shlex.quote(safe_conn_name)}")
                     if code2 == 0 and out2:
                         ssid_line = out2.split(":", 1)
                         if len(ssid_line) > 1:
@@ -325,7 +367,8 @@ def api_saved_networks():
         return jsonify({"ok": True, "networks": saved_networks})
     
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+        print(f"Error in api_saved_networks: {e}")  # Log to server only
+        return jsonify({"ok": False, "error": "Failed to load saved networks"}), 500
 
 @app.post("/api/forget-network")
 def api_forget_network():
@@ -346,13 +389,17 @@ def api_forget_network():
                 parts = line.split(":")
                 if len(parts) >= 2 and "wifi" in parts[1].lower():
                     conn_name = parts[0]
+                    # Sanitize connection name
+                    safe_conn_name = sanitize_connection_name(conn_name)
+                    if not safe_conn_name:
+                        continue
                     # Check if this connection matches the SSID
-                    code2, out2, _ = run(f"nmcli -t -f 802-11-wireless.ssid connection show '{conn_name}'")
+                    code2, out2, _ = run(f"nmcli -t -f 802-11-wireless.ssid connection show {shlex.quote(safe_conn_name)}")
                     if code2 == 0 and out2:
                         ssid_line = out2.split(":", 1)
                         if len(ssid_line) > 1 and ssid_line[1].strip() == ssid:
                             # Delete this connection
-                            code3, _, _ = run(f"nmcli connection delete '{conn_name}'")
+                            code3, _, _ = run(f"nmcli connection delete {shlex.quote(safe_conn_name)}")
                             if code3 == 0:
                                 deleted = True
                                 break
@@ -363,7 +410,132 @@ def api_forget_network():
             return jsonify({"ok": False, "error": "Network not found"}), 404
     
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+        print(f"Error in api_forget_network: {e}")  # Log to server only
+        return jsonify({"ok": False, "error": "Failed to forget network"}), 500
+
+@app.post("/api/disconnect-current")
+def api_disconnect_current():
+    """Disconnect and forget current WiFi connection"""
+    try:
+        # Get current connection on client interface
+        code, out, _ = run(f"nmcli -t -f NAME,TYPE,DEVICE connection show --active")
+        
+        current_conn_name = None
+        if code == 0 and out:
+            for line in out.splitlines():
+                parts = line.split(":")
+                if len(parts) >= 3 and parts[2] == CLIENT_IFACE:
+                    conn_name = parts[0]
+                    # Sanitize connection name
+                    safe_conn_name = sanitize_connection_name(conn_name)
+                    if safe_conn_name:
+                        current_conn_name = safe_conn_name
+                        break
+        
+        if not current_conn_name:
+            return jsonify({"ok": False, "error": "No active connection"}), 404
+        
+        # Disconnect and delete the connection
+        code, _, _ = run(f"nmcli connection delete {shlex.quote(current_conn_name)}")
+        
+        if code == 0:
+            return jsonify({"ok": True, "message": "Disconnected and forgot current network"})
+        else:
+            return jsonify({"ok": False, "error": "Failed to disconnect"}), 500
+    
+    except Exception as e:
+        print(f"Error in api_disconnect_current: {e}")  # Log to server only
+        return jsonify({"ok": False, "error": "Failed to disconnect"}), 500
+
+@app.post("/api/change-ap-password")
+def api_change_ap_password():
+    """Change AP password in hostapd configuration"""
+    data = request.get_json(silent=True) or {}
+    new_password = (data.get("password") or "").strip()
+    
+    # Sanitize and validate password
+    sanitized_password = sanitize_password(new_password)
+    
+    if not sanitized_password:
+        if not new_password:
+            return jsonify({"ok": False, "error": "Password required"}), 400
+        elif len(new_password) < 8:
+            return jsonify({"ok": False, "error": "Password must be at least 8 characters"}), 400
+        elif len(new_password) > 63:
+            return jsonify({"ok": False, "error": "Password must not exceed 63 characters"}), 400
+        else:
+            return jsonify({"ok": False, "error": "Password contains invalid characters"}), 400
+    
+    try:
+        hostapd_conf = "/etc/hostapd/hostapd.conf"
+        
+        # Read current config
+        with open(hostapd_conf, 'r') as f:
+            lines = f.readlines()
+        
+        # Update wpa_passphrase line with sanitized password
+        updated = False
+        new_lines = []
+        for line in lines:
+            if line.strip().startswith('wpa_passphrase='):
+                # Safely write password without any shell interpretation
+                new_lines.append(f'wpa_passphrase={sanitized_password}\n')
+                updated = True
+            else:
+                new_lines.append(line)
+        
+        if not updated:
+            return jsonify({"ok": False, "error": "Configuration error"}), 500
+        
+        # Write updated config atomically
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, dir='/etc/hostapd') as tmp_file:
+            tmp_file.writelines(new_lines)
+            tmp_path = tmp_file.name
+        
+        # Atomic move
+        import shutil
+        shutil.move(tmp_path, hostapd_conf)
+        
+        # Set proper permissions
+        import os
+        os.chmod(hostapd_conf, 0o600)
+        
+        # Restart hostapd to apply changes
+        run("sudo systemctl restart hostapd", timeout=10)
+        time.sleep(2)
+        
+        return jsonify({"ok": True, "message": "AP password updated successfully"})
+    
+    except PermissionError:
+        print("Permission denied: Cannot modify hostapd.conf")
+        return jsonify({"ok": False, "error": "Permission denied"}), 500
+    except Exception as e:
+        print(f"Error in api_change_ap_password: {e}")
+        return jsonify({"ok": False, "error": "Failed to update AP password"}), 500
+
+@app.get("/api/ap-info")
+def api_ap_info():
+    """Get current AP information (SSID only, not password)"""
+    try:
+        hostapd_conf = "/etc/hostapd/hostapd.conf"
+        
+        ssid = None
+        with open(hostapd_conf, 'r') as f:
+            for line in f:
+                if line.strip().startswith('ssid='):
+                    ssid = line.split('=', 1)[1].strip()
+                    break
+        
+        return jsonify({
+            "ok": True,
+            "ssid": ssid or "Unknown",
+            "interface": AP_IFACE
+        })
+    
+    except Exception as e:
+        print(f"Error in api_ap_info: {e}")
+        return jsonify({"ok": False, "error": "Failed to get AP info"}), 500
 
 @app.get("/canonical.html")
 def canonical_html():
@@ -397,7 +569,16 @@ def serve_static(filename):
 
 @app.route("/<path:path>")
 def serve_frontend(path):
-    if os.path.exists(os.path.join(FRONTEND_DIR, path)):
+    # Prevent path traversal attacks
+    if ".." in path or path.startswith("/"):
+        return send_from_directory(FRONTEND_DIR, "index.html")
+    
+    full_path = os.path.join(FRONTEND_DIR, path)
+    # Ensure the resolved path is within FRONTEND_DIR
+    if not os.path.abspath(full_path).startswith(os.path.abspath(FRONTEND_DIR)):
+        return send_from_directory(FRONTEND_DIR, "index.html")
+    
+    if os.path.exists(full_path):
         return send_from_directory(FRONTEND_DIR, path)
     return send_from_directory(FRONTEND_DIR, "index.html")
 
