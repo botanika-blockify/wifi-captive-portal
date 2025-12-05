@@ -12,12 +12,41 @@ function switchTab(tabName) {
 
   if (tabName === 'wifi') {
     document.getElementById('wifiTab').classList.add('active')
-  } else if (tabName === 'fan') {
-    document.getElementById('fanTab').classList.add('active')
-    loadFanStatus()
-  } else if (tabName === 'system') {
-    document.getElementById('systemTab').classList.add('active')
+  } else if (tabName === 'monitor') {
+    document.getElementById('monitorTab').classList.add('active')
+    loadSystemMonitor()
+  } else if (tabName === 'ap') {
+    document.getElementById('apTab').classList.add('active')
     loadAPInfo()
+  }
+}
+
+async function loadSystemMonitor() {
+  try {
+    let res = await fetch('/api/system/status')
+    let data = await res.json()
+
+    if (data.ok && data.system) {
+      const sys = data.system
+      
+      // Update metrics
+      document.getElementById('cpuUsage').textContent = 
+        sys.cpu_usage ? `${sys.cpu_usage}%` : 'N/A'
+      
+      document.getElementById('memoryInfo').textContent = 
+        sys.memory || 'N/A'
+      
+      document.getElementById('diskInfo').textContent = 
+        sys.disk || 'N/A'
+      
+      document.getElementById('temperature').textContent = 
+        sys.temperature ? `${sys.temperature.toFixed(1)}°C` : 'N/A'
+      
+      document.getElementById('uptime').textContent = 
+        sys.uptime || 'N/A'
+    }
+  } catch (e) {
+    console.error('Failed to load system monitor:', e)
   }
 }
 

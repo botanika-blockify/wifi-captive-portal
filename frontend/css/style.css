@@ -744,6 +744,44 @@ button.loading span {
   border-radius: 8px;
 }
 
+/* System Monitor Styles */
+.system-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  background: #181c20;
+  border: 1px solid #2f343b;
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+  overflow: hidden;
+}
+
+.stat-card-full {
+  grid-column: 1 / -1;
+}
+
+.stat-label {
+  color: #a0a6b0;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.stat-value {
+  color: #f28c38;
+  font-size: 16px;
+  font-weight: 700;
+  word-break: break-all;
+  overflow-wrap: break-word;
+}
+
 /* Fan Control Styles */
 .fan-controls {
   display: flex;

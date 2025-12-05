@@ -1,23 +1,75 @@
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
 class FanService:
     def __init__(self):
-        self.speed = 0  # 0: off, 1: low, 2: medium, 3: high
-        self.running = False
-        self.auto_mode = True
+        self.hwmon_path = "/sys/class/hwmon/hwmon7"
+        self.pwm_file = os.path.join(self.hwmon_path, "pwm1")
+        self.pwm_enable_file = os.path.join(self.hwmon_path, "pwm1_enable")
+        
+        self.speed_map = {0: 0, 1: 85, 2: 170, 3: 255}
+        
+        self._enable_manual_control()
+    
+    def _enable_manual_control(self):
+        try:
+            if os.path.exists(self.pwm_enable_file):
+                with open(self.pwm_enable_file, 'w') as f:
+                    f.write('1')
+        except Exception as e:
+            logger.warning(f"Could not enable manual control: {e}")
+    
+    def _read_pwm(self):
+        try:
+            if os.path.exists(self.pwm_file):
+                with open(self.pwm_file, 'r') as f:
+                    return int(f.read().strip())
+            return 0
+        except Exception as e:
+            logger.error(f"Error reading PWM: {e}")
+            return 0
+    
+    def _write_pwm(self, value):
+        """Write PWM value (0-255)"""
+        try:
+            if os.path.exists(self.pwm_file):
+                with open(self.pwm_file, 'w') as f:
+                    f.write(str(value))
+                return True
+            else:
+                logger.error(f"PWM file not found: {self.pwm_file}")
+                return False
+        except Exception as e:
+            logger.error(f"Error writing PWM: {e}")
+            return False
+    
+    def _pwm_to_speed(self, pwm_value):
+        if pwm_value == 0:
+            return 0
+        elif pwm_value <= 85:
+            return 1
+        elif pwm_value <= 170:
+            return 2
+        else:
+            return 3
     
     def get_status(self):
-        """Get current fan status"""
         try:
             speed_labels = {0: "Off", 1: "Low", 2: "Medium", 3: "High"}
             
+            # Read current PWM value
+            pwm_value = self._read_pwm()
+            speed = self._pwm_to_speed(pwm_value)
+            running = pwm_value > 0
+            
             return {
-                "speed": self.speed,
-                "speed_label": speed_labels.get(self.speed, "Unknown"),
-                "running": self.running,
-                "auto_mode": self.auto_mode
+                "speed": speed,
+                "speed_label": speed_labels.get(speed, "Unknown"),
+                "running": running,
+                "auto_mode": False,
+                "pwm_value": pwm_value
             }
             
         except Exception as e:
@@ -31,19 +83,26 @@ class FanService:
             }
     
     def set_speed(self, speed):
-        """Set fan speed"""
+        """Set fan speed (0-3)"""
         try:
             speed = int(speed)
             if 0 <= speed <= 3:
-                self.speed = speed
-                self.running = speed > 0
+                pwm_value = self.speed_map[speed]
                 
-                return {
-                    "success": True,
-                    "speed": self.speed,
-                    "running": self.running,
-                    "message": f"Fan speed set to {self.speed}"
-                }
+                if self._write_pwm(pwm_value):
+                    speed_labels = {0: "Off", 1: "Low", 2: "Medium", 3: "High"}
+                    return {
+                        "success": True,
+                        "speed": speed,
+                        "running": speed > 0,
+                        "pwm_value": pwm_value,
+                        "message": f"Fan speed set to {speed_labels[speed]}"
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "error": "Failed to write to PWM device"
+                    }
             else:
                 return {
                     "success": False,
@@ -65,18 +124,32 @@ class FanService:
     def toggle(self):
         """Toggle fan on/off"""
         try:
-            self.running = not self.running
+            current_pwm = self._read_pwm()
             
-            if not self.running:
-                self.speed = 0
-            elif self.speed == 0:
-                self.speed = 2  # Default to medium when turning on
+            if current_pwm > 0:
+                # Turn off
+                if self._write_pwm(0):
+                    return {
+                        "success": True,
+                        "running": False,
+                        "speed": 0,
+                        "pwm_value": 0,
+                        "message": "Fan stopped"
+                    }
+            else:
+                # Turn on to medium speed
+                if self._write_pwm(170):
+                    return {
+                        "success": True,
+                        "running": True,
+                        "speed": 2,
+                        "pwm_value": 170,
+                        "message": "Fan started"
+                    }
             
             return {
-                "success": True,
-                "running": self.running,
-                "speed": self.speed,
-                "message": f"Fan {'started' if self.running else 'stopped'}"
+                "success": False,
+                "error": "Failed to toggle fan"
             }
             
         except Exception as e:

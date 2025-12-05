@@ -35,9 +35,15 @@
         </button>
         <button
           class="tab"
-          onclick="switchTab('system')"
+          onclick="switchTab('monitor')"
         >
-          System
+          Monitor
+        </button>
+        <button
+          class="tab"
+          onclick="switchTab('ap')"
+        >
+          AP Settings
         </button>
       </div>
 
@@ -193,9 +199,9 @@
       </div>
       <!-- End WiFi Tab -->
 
-      <!-- System Tab -->
+      <!-- AP Settings Tab -->
       <div
-        id="systemTab"
+        id="apTab"
         class="tab-content"
       >
         <div class="section-title">Access Point Settings</div>
@@ -259,7 +265,64 @@
         ></p>
         <p id="apError"></p>
       </div>
-      <!-- End System Tab -->
+      <!-- End AP Settings Tab -->
+
+      <!-- System Monitor Tab -->
+      <div
+        id="monitorTab"
+        class="tab-content"
+      >
+        <div class="section-title">System Monitor</div>
+
+        <div class="system-stats">
+          <div class="stat-card">
+            <div class="stat-label">CPU</div>
+            <div
+              class="stat-value"
+              id="cpuUsage"
+            >
+              --%
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Memory</div>
+            <div
+              class="stat-value"
+              id="memoryInfo"
+            >
+              --
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Disk</div>
+            <div
+              class="stat-value"
+              id="diskInfo"
+            >
+              --
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Temperature</div>
+            <div
+              class="stat-value"
+              id="temperature"
+            >
+              --°C
+            </div>
+          </div>
+          <div class="stat-card stat-card-full">
+            <div class="stat-label">Uptime</div>
+            <div
+              class="stat-value"
+              id="uptime"
+            >
+              --
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- End System Monitor Tab -->
 
       <!-- Fan Tab -->
       <div

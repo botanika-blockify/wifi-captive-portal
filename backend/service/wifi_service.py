@@ -11,7 +11,7 @@ class WiFiService:
         self.ap_iface = ap_iface
     
     def run_command(self, cmd, timeout=30):
-        """Execute shell command safely"""
+        p = None
         try:
             p = subprocess.Popen(
                 shlex.split(cmd),
@@ -221,7 +221,6 @@ class WiFiService:
             if not ssid:
                 return {"success": False, "error": "SSID required"}
             
-            # Find connection by SSID
             code, out, _ = self.run_command("nmcli -t -f NAME,TYPE connection show")
             
             deleted = False
@@ -234,7 +233,6 @@ class WiFiService:
                         if not safe_conn_name:
                             continue
                         
-                        # Check if this connection matches the SSID
                         code2, out2, _ = self.run_command(
                             f"nmcli -t -f 802-11-wireless.ssid connection show {shlex.quote(safe_conn_name)}"
                         )
@@ -261,7 +259,6 @@ class WiFiService:
     def disconnect_current(self):
         """Disconnect and forget current WiFi connection"""
         try:
-            # Get current connection
             code, out, _ = self.run_command("nmcli -t -f NAME,TYPE,DEVICE connection show --active")
             
             current_conn_name = None

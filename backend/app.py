@@ -4,7 +4,9 @@ import subprocess
 import shlex
 import string
 from flask import Flask, request, jsonify, send_from_directory, redirect, Response
+
 from service import FanService, WiFiService
+from service.system_monitor import SystemMonitor
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "frontend"))
@@ -16,6 +18,7 @@ app = Flask(__name__, static_folder=None)
 # Initialize services
 fan_service = FanService()
 wifi_service = WiFiService(client_iface=CLIENT_IFACE, ap_iface=AP_IFACE)
+system_monitor = SystemMonitor()
 
 class Config:
     MAX_CONNECTION_ATTEMPTS = 3
@@ -89,7 +92,6 @@ def api_scan():
 
 @app.post("/api/connect")
 def api_connect():
-    """Connect to WiFi network"""
     try:
         data = request.get_json(silent=True) or {}
         ssid = (data.get("ssid") or "").strip()
@@ -110,7 +112,6 @@ def api_connect():
 
 @app.get("/api/status")
 def api_status():
-    """Get system status"""
     try:
         code_ip, out_ip, _ = run_command(f"ip -br addr show dev {CLIENT_IFACE}")
         code_rt, out_rt, _ = run_command("ip route show default")
@@ -122,7 +123,6 @@ def api_status():
         code_ap, _, _ = run_command("sudo systemctl is-active hostapd")
         ap_active = (code_ap == 0)
         
-        # Get client connection status from WiFi service
         conn_result = wifi_service.get_current_connection()
         client_connected = conn_result.get("success") and conn_result.get("connected", False)
         
@@ -144,8 +144,6 @@ def api_status():
 
 @app.get("/api/health")
 def api_health():
-    """Health check endpoint"""
-    # Get client connection status from WiFi service
     conn_result = wifi_service.get_current_connection()
     client_connected = conn_result.get("success") and conn_result.get("connected", False)
     
@@ -221,7 +219,6 @@ def success_txt():
 
 @app.get("/api/current-connection")
 def api_current_connection():
-    """Get currently connected WiFi network on client interface"""
     try:
         result = wifi_service.get_current_connection()
         
@@ -244,7 +241,6 @@ def api_current_connection():
 
 @app.get("/api/saved-networks")
 def api_saved_networks():
-    """Get list of saved WiFi networks"""
     try:
         result = wifi_service.get_saved_networks()
         
@@ -258,7 +254,6 @@ def api_saved_networks():
 
 @app.post("/api/forget-network")
 def api_forget_network():
-    """Delete a saved WiFi connection"""
     try:
         data = request.get_json(silent=True) or {}
         ssid = (data.get("ssid") or "").strip()
@@ -278,7 +273,6 @@ def api_forget_network():
 
 @app.post("/api/disconnect-current")
 def api_disconnect_current():
-    """Disconnect and forget current WiFi connection"""
     try:
         result = wifi_service.disconnect_current()
         
@@ -298,7 +292,6 @@ def api_change_ap_password():
     data = request.get_json(silent=True) or {}
     new_password = (data.get("password") or "").strip()
     
-    # Sanitize and validate password
     sanitized_password = sanitize_ap_password(new_password)
     
     if not sanitized_password:
@@ -314,16 +307,13 @@ def api_change_ap_password():
     try:
         hostapd_conf = "/etc/hostapd/hostapd.conf"
         
-        # Read current config
         with open(hostapd_conf, 'r') as f:
             lines = f.readlines()
         
-        # Update wpa_passphrase line with sanitized password
         updated = False
         new_lines = []
         for line in lines:
             if line.strip().startswith('wpa_passphrase='):
-                # Safely write password without any shell interpretation
                 new_lines.append(f'wpa_passphrase={sanitized_password}\n')
                 updated = True
             else:
@@ -332,20 +322,16 @@ def api_change_ap_password():
         if not updated:
             return jsonify({"ok": False, "error": "Configuration error"}), 500
         
-        # Write updated config atomically
         import tempfile
         with tempfile.NamedTemporaryFile(mode='w', delete=False, dir='/etc/hostapd') as tmp_file:
             tmp_file.writelines(new_lines)
             tmp_path = tmp_file.name
         
-        # Atomic move
         import shutil
         shutil.move(tmp_path, hostapd_conf)
         
-        # Set proper permissions
         os.chmod(hostapd_conf, 0o600)
         
-        # Restart hostapd to apply changes
         run_command("sudo systemctl restart hostapd", timeout=10)
         time.sleep(2)
         
@@ -428,6 +414,28 @@ def api_fan_toggle():
         print(f"Error in api_fan_toggle: {e}")
         return jsonify({"ok": False, "error": "Failed to toggle fan"}), 500
 
+# System Monitor APIs
+@app.get("/api/system/status")
+def api_system_status():
+    """Get system status"""
+    try:
+        print("[DEBUG] Getting system info...")
+        status = system_monitor.get_system_info()
+        print(f"[DEBUG] Status result: {status}")
+        
+        if "error" in status:
+            print(f"[ERROR] {status['error']}")
+            return jsonify({"ok": False, "error": status["error"]}), 500
+        
+        result = {"ok": True, "system": status}
+        print(f"[DEBUG] Returning: {result}")
+        return jsonify(result)
+    except Exception as e:
+        print(f"[ERROR] Exception in api_system_status: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"ok": False, "error": f"Failed to get system status: {str(e)}"}), 500
+
 @app.get("/canonical.html")
 def canonical_html():
     html_content = """
@@ -460,12 +468,10 @@ def serve_static(filename):
 
 @app.route("/<path:path>")
 def serve_frontend(path):
-    # Prevent path traversal attacks
     if ".." in path or path.startswith("/"):
         return send_from_directory(FRONTEND_DIR, "index.html")
     
     full_path = os.path.join(FRONTEND_DIR, path)
-    # Ensure the resolved path is within FRONTEND_DIR
     if not os.path.abspath(full_path).startswith(os.path.abspath(FRONTEND_DIR)):
         return send_from_directory(FRONTEND_DIR, "index.html")
     
