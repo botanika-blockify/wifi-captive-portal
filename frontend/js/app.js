@@ -531,21 +531,39 @@ async function connect() {
   clearMessages()
   const connectBtn = document.getElementById('connectBtn')
   const resultEl = document.getElementById('result')
+  const connectingStatus = document.getElementById('connectingStatus')
+  const connectingSsid = connectingStatus.querySelector('.connecting-ssid')
+  const connectionError = document.getElementById('connectionError')
+  const errorSsid = connectionError.querySelector('.connection-error-ssid')
+  const errorMessage = connectionError.querySelector('.connection-error-message')
 
   const ssid = document.getElementById('ssidInput').value.trim()
   const password = document.getElementById('pwdInput').value.trim()
 
   if (!ssid) {
-    const errorEl = document.getElementById('error')
-    errorEl.innerHTML = 'Please enter a network name'
-    errorEl.className = 'err'
-    errorEl.style.animation = 'fadeIn 0.5s forwards'
+    errorSsid.textContent = 'Missing Network'
+    errorMessage.textContent = 'Please enter a network name'
+    connectionError.style.display = 'flex'
+    
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+      connectionError.style.animation = 'fadeOut 0.5s forwards'
+      setTimeout(() => {
+        connectionError.style.display = 'none'
+        connectionError.style.animation = ''
+      }, 500)
+    }, 5000)
+    
     return
   }
 
   connectBtn.disabled = true
-  connectBtn.classList.add('loading')
-  connectBtn.querySelector('span').innerText = 'Connecting'
+  
+  // Hide any previous error, show connecting status
+  connectionError.style.display = 'none'
+  connectionError.style.animation = ''
+  connectingSsid.textContent = ssid
+  connectingStatus.style.display = 'flex'
 
   try {
     let res = await fetch('/api/connect', {
@@ -559,23 +577,44 @@ async function connect() {
     if (res.status === 200 && data.ok) {
       window.location.href = '/success.html'
     } else {
-      const errorEl = document.getElementById('error')
       const errorMsg = data.error || 'Unable to join this network. Please try again.'
-      errorEl.innerHTML = `${errorMsg}`
-      errorEl.className = 'err'
-      errorEl.style.animation = 'fadeIn 0.5s forwards'
+      
+      // Hide connecting status, show error in network area
+      connectingStatus.style.display = 'none'
+      errorSsid.textContent = ssid
+      errorMessage.textContent = errorMsg
+      connectionError.style.display = 'flex'
+      
+      // Auto-hide after 5 seconds
+      setTimeout(() => {
+        connectionError.style.animation = 'fadeOut 0.5s forwards'
+        setTimeout(() => {
+          connectionError.style.display = 'none'
+          connectionError.style.animation = ''
+        }, 500)
+      }, 5000)
+      
       resultEl.innerText = ''
     }
   } catch (e) {
-    const errorEl = document.getElementById('error')
-    errorEl.innerHTML = 'Connection failed. Please try again.'
-    errorEl.className = 'err'
-    errorEl.style.animation = 'fadeIn 0.5s forwards'
+    // Hide connecting status, show error in network area
+    connectingStatus.style.display = 'none'
+    errorSsid.textContent = ssid
+    errorMessage.textContent = 'Connection failed. Please try again.'
+    connectionError.style.display = 'flex'
+    
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+      connectionError.style.animation = 'fadeOut 0.5s forwards'
+      setTimeout(() => {
+        connectionError.style.display = 'none'
+        connectionError.style.animation = ''
+      }, 500)
+    }, 5000)
+    
     resultEl.innerText = ''
   } finally {
     connectBtn.disabled = false
-    connectBtn.classList.remove('loading')
-    connectBtn.querySelector('span').innerText = 'Connect'
   }
 }
 
